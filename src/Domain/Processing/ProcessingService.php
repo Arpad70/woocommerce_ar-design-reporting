@@ -67,6 +67,21 @@ final class ProcessingService
 		$to_status   = sanitize_key($to_status);
 		$actor_user_id = get_current_user_id() ?: null;
 
+		if ($this->isFailedStatus($to_status) && ! $this->canTransitionToFailed($from_status)) {
+			$this->audit_logger->log(
+				'order_failed_transition_blocked',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $from_status),
+				array('status' => $to_status),
+				array('source' => 'woocommerce_order_status_changed')
+			);
+
+			return;
+		}
+
 		$update_data = array(
 			'status'         => $to_status,
 			'source_trigger' => 'woocommerce_order_status_changed',
@@ -323,5 +338,15 @@ final class ProcessingService
 		}
 
 		return '';
+	}
+
+	private function isFailedStatus(string $status): bool
+	{
+		return in_array($status, array('failed', 'neuspesna'), true);
+	}
+
+	private function canTransitionToFailed(string $from_status): bool
+	{
+		return in_array($from_status, array('vybavena', 'completed'), true);
 	}
 }

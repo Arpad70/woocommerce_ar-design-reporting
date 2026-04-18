@@ -29,7 +29,9 @@ function run_workflow_integration_test(): void
 	$processing_service->initializeOrder(1001);
 	$processing_service->takeOverOrder(1001, 42);
 	$processing_service->finishProcessing(1001, 42);
+	$processing_service->handleStatusChange(1001, 'processing', 'failed');
 	$processing_service->completeFulfillment(1001, 84);
+	$processing_service->handleStatusChange(1001, 'vybavena', 'failed');
 
 	$rows = $wpdb->getTableRows($order_processing_table);
 
@@ -39,12 +41,12 @@ function run_workflow_integration_test(): void
 
 	$row = $rows[0];
 
-	if ('vybavena' !== ($row['status'] ?? null)) {
-		throw new RuntimeException('Workflow test failed: expected final status "vybavena".');
+	if ('failed' !== ($row['status'] ?? null)) {
+		throw new RuntimeException('Workflow test failed: expected final status "failed" only after "vybavena".');
 	}
 
-	if ((int) ($row['owner_user_id'] ?? 0) !== 84) {
-		throw new RuntimeException('Workflow test failed: expected owner_user_id = 84.');
+	if ((int) ($row['owner_user_id'] ?? 0) !== 777) {
+		throw new RuntimeException('Workflow test failed: expected owner_user_id = 777.');
 	}
 
 	if (empty($row['started_at_gmt']) || empty($row['finished_at_gmt'])) {
