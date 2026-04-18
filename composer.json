@@ -15,6 +15,9 @@
     "build": [
       "bash scripts/build-plugin.sh"
     ],
+    "verify:version": [
+      "php scripts/verify-version-consistency.php"
+    ],
     "test:integration": [
       "php tests/run-integration-tests.php"
     ]

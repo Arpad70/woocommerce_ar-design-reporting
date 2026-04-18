@@ -6,8 +6,6 @@ namespace ArDesign\Reporting\Support\Updates;
 
 final class GitHubUpdater
 {
-	private const CACHE_KEY = 'ard_reporting_github_release_data';
-
 	private const CACHE_TTL = 900;
 
 	private string $repository_full_name;
@@ -27,6 +25,7 @@ final class GitHubUpdater
 	{
 		add_filter('pre_set_site_transient_update_plugins', array($this, 'injectUpdateData'));
 		add_filter('plugins_api', array($this, 'injectPluginInfo'), 20, 3);
+		add_action('upgrader_process_complete', array($this, 'clearCacheAfterUpgrade'), 10, 2);
 	}
 
 	/**
@@ -100,7 +99,7 @@ final class GitHubUpdater
 	 */
 	private function getLatestRelease(): array
 	{
-		$cached = get_transient(self::CACHE_KEY);
+		$cached = get_transient($this->getCacheKey());
 
 		if (is_array($cached) && isset($cached['version'])) {
 			return $cached;
@@ -152,9 +151,30 @@ final class GitHubUpdater
 			'body'        => $changelog,
 		);
 
-		set_transient(self::CACHE_KEY, $release, self::CACHE_TTL);
+		set_transient($this->getCacheKey(), $release, self::CACHE_TTL);
 
 		return $release;
+	}
+
+	/**
+	 * @param mixed $upgrader
+	 * @param mixed $options
+	 */
+	public function clearCacheAfterUpgrade($upgrader, $options): void
+	{
+		if (! is_array($options) || ! isset($options['type'], $options['action'])) {
+			return;
+		}
+
+		if ('plugin' !== $options['type'] || 'update' !== $options['action']) {
+			return;
+		}
+
+		$plugins = isset($options['plugins']) && is_array($options['plugins']) ? $options['plugins'] : array();
+
+		if (in_array($this->plugin_basename, $plugins, true)) {
+			delete_transient($this->getCacheKey());
+		}
 	}
 
 	/**
@@ -188,5 +208,9 @@ final class GitHubUpdater
 
 		return $fallback_url;
 	}
-}
 
+	private function getCacheKey(): string
+	{
+		return 'ard_reporting_github_release_data_' . md5($this->repository_full_name);
+	}
+}

@@ -22,6 +22,8 @@ jobs:
           find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
           php -l ar-design-reporting.php
 
+      - name: Verify Version Consistency
+        run: php scripts/verify-version-consistency.php
+
       - name: Integration Tests
         run: php tests/run-integration-tests.php
-

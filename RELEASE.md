@@ -8,6 +8,12 @@
 4. doplň záznam do `CHANGELOG.md`
 5. merge PR do `main`
 
+CI i release workflow validují konzistenci verzí (`VERSION`, plugin header a konstanty) skriptem:
+
+```bash
+php scripts/verify-version-consistency.php
+```
+
 Po merge do `main` se automaticky spustí workflow `.github/workflows/release.yml`.
 Pokud se v commitu změnil soubor `VERSION`, workflow:
 

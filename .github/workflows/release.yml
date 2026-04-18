@@ -26,6 +26,7 @@ jobs:
       - name: Verify Build
         run: |
           find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
+          php scripts/verify-version-consistency.php
           php tests/run-integration-tests.php
 
       - name: Resolve Version
