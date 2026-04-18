@@ -26,6 +26,7 @@ use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
 use ArDesign\Reporting\Support\Updates\GitHubUpdater;
+use ArDesign\Reporting\Support\Updates\RollbackManager;
 
 final class ServiceProvider
 {
@@ -90,6 +91,13 @@ final class ServiceProvider
 				ARD_REPORTING_GITHUB_REPOSITORY,
 				ARD_REPORTING_BASENAME,
 				ARD_REPORTING_VERSION
+			)
+		);
+		$container->set(
+			RollbackManager::class,
+			static fn (): RollbackManager => new RollbackManager(
+				ARD_REPORTING_BASENAME,
+				ARD_REPORTING_PATH
 			)
 		);
 		$container->set(

@@ -22,6 +22,10 @@ Pokud se v commitu změnil soubor `VERSION`, workflow:
 - vytvoří GitHub Release,
 - přiloží instalační asset `ar-design-reporting.zip`.
 
+Pri pushi branchu so zmenou `VERSION` alebo `CHANGELOG.md` workflow
+`.github/workflows/auto-pr-version.yml` automaticky otvorí PR do `main`,
+pokiaľ ešte neexistuje.
+
 ## Lokální build ZIP balíčku (volitelně)
 
 ```bash
@@ -39,3 +43,6 @@ Výstup lokálně:
 2. v produkci nech WordPress detekovat novou verzi pluginu z GitHub release
 3. spusť standardní aktualizaci pluginu v administraci
 4. zkontroluj dashboard modulu a DB verzi
+
+Pri zlyhaní aktualizácie sa plugin pokúsi obnoviť predchádzajúcu verziu
+z lokálnej zálohy (`wp-content/uploads/ard-reporting-backups/latest`).

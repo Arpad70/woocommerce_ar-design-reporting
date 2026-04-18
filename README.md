@@ -24,4 +24,6 @@ HPOS-first WooCommerce reporting plugin pro `ar-design.sk`.
 - postup releasu je popsaný v `RELEASE.md`
 - CI testy pro každý PR běží v GitHub Actions (`.github/workflows/ci.yml`)
 - release ZIP a GitHub release se vytváří automaticky po merge do `main`, pokud se změní `VERSION`
+- pri pushi branchu so zmenou `VERSION`/`CHANGELOG.md` sa automaticky vytvorí PR do `main`
 - plugin umí kontrolovat nové verze z GitHub Releases (`Update URI` + interní updater)
+- pri neúspešnej aktualizácii sa plugin pokúsi obnoviť predchádzajúcu verziu z lokálnej zálohy

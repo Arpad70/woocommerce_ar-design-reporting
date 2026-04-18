@@ -12,6 +12,7 @@ use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
 use ArDesign\Reporting\Support\Updates\GitHubUpdater;
+use ArDesign\Reporting\Support\Updates\RollbackManager;
 
 final class Bootstrap
 {
@@ -53,6 +54,7 @@ final class Bootstrap
 		add_action( 'init', array( $this, 'registerHooks' ) );
 		add_action( 'admin_init', array( $this, 'registerAdminActions' ) );
 		add_action( 'init', array( $this, 'registerUpdaters' ) );
+		add_action( 'init', array( $this, 'registerRollbackManager' ) );
 		$this->registerSchedulers();
 	}
 
@@ -85,6 +87,11 @@ final class Bootstrap
 	public function registerUpdaters(): void
 	{
 		$this->container->get( GitHubUpdater::class )->register();
+	}
+
+	public function registerRollbackManager(): void
+	{
+		$this->container->get( RollbackManager::class )->register();
 	}
 
 	public static function activate(): void
