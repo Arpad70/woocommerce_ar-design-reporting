@@ -148,7 +148,10 @@ final class WorkflowActions
 
 			$path = (string) wp_parse_url($candidate, PHP_URL_PATH);
 
-			if (false !== strpos($path, '/wp-admin/')) {
+			if (
+				false !== strpos($path, '/wp-admin/') &&
+				false === strpos($path, '/wp-admin/wp-admin/')
+			) {
 				return $candidate;
 			}
 		}

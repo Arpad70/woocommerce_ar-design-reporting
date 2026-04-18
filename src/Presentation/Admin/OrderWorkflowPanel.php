@@ -107,7 +107,10 @@ final class OrderWorkflowPanel
 		$request_uri = wp_unslash( $_SERVER['REQUEST_URI'] );
 		$request_uri = '/' . ltrim( $request_uri, '/' );
 
-		return admin_url( ltrim( $request_uri, '/' ) );
+		if ( false !== strpos( $request_uri, '/wp-admin/' ) ) {
+			return home_url( $request_uri );
+		}
+
+		return admin_url( 'admin.php' );
 	}
 }
-
