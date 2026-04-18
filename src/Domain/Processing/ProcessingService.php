@@ -152,14 +152,17 @@ final class ProcessingService
 			return;
 		}
 
-		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
 		$finished_at = current_time('mysql', true);
-		$processing_seconds = $this->calculateProcessingSeconds($started_at, $finished_at);
+		$status = $this->updateWooOrderToPackedStatus($order_id, $actor_user_id);
+
+		if ('' === $status) {
+			$status = 'zabalena';
+		}
 
 		$this->order_processing_repository->updateByOrderId(
 			$order_id,
 			array(
-				'status'         => 'zabalena',
+				'status'         => $status,
 				'source_trigger' => 'manual_packed',
 				'updated_at_gmt' => $finished_at,
 			)
@@ -175,7 +178,7 @@ final class ProcessingService
 				'status' => $record['status'] ?? null,
 			),
 			array(
-				'status' => 'zabalena',
+				'status' => $status,
 			),
 			array('source' => 'manual_packed')
 		);
@@ -191,6 +194,11 @@ final class ProcessingService
 		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
 		$finished_at = current_time('mysql', true);
 		$processing_seconds = $this->calculateProcessingSeconds($started_at, $finished_at);
+		$status = $this->updateWooOrderToFulfilledStatus($order_id, $actor_user_id);
+
+		if ('' === $status) {
+			$status = 'vybavena';
+		}
 
 		$this->order_processing_repository->updateByOrderId(
 			$order_id,
@@ -198,7 +206,7 @@ final class ProcessingService
 				'owner_user_id'      => $actor_user_id,
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'vybavena',
+				'status'             => $status,
 				'source_trigger'     => 'manual_fulfillment',
 				'updated_at_gmt'     => $finished_at,
 			)
@@ -218,12 +226,10 @@ final class ProcessingService
 			array(
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'vybavena',
+				'status'             => $status,
 			),
 			array('source' => 'manual_fulfillment')
 		);
-
-		$this->updateWooOrderToFulfilledStatus($order_id, $actor_user_id);
 	}
 
 	/**
@@ -278,23 +284,23 @@ final class ProcessingService
 		}
 	}
 
-	private function updateWooOrderToFulfilledStatus(int $order_id, int $actor_user_id): void
+	private function updateWooOrderToFulfilledStatus(int $order_id, int $actor_user_id): string
 	{
 		if (! function_exists('wc_get_order') || ! function_exists('wc_get_order_statuses')) {
-			return;
+			return '';
 		}
 
 		$order = wc_get_order($order_id);
 
 		if (! $order instanceof \WC_Order) {
-			return;
+			return '';
 		}
 
 		$target_status = $this->resolveFulfilledStatusSlug();
 		$current_status = (string) $order->get_status();
 
 		if ('' === $target_status || $target_status === $current_status) {
-			return;
+			return $current_status;
 		}
 
 		$order->update_status(
@@ -313,6 +319,8 @@ final class ProcessingService
 			array('woocommerce_status' => $target_status),
 			array('source' => 'manual_fulfillment')
 		);
+
+		return $target_status;
 	}
 
 	private function resolveFulfilledStatusSlug(): string
@@ -335,6 +343,66 @@ final class ProcessingService
 
 		if (isset($statuses['wc-completed'])) {
 			return 'completed';
+		}
+
+		return '';
+	}
+
+	private function updateWooOrderToPackedStatus(int $order_id, int $actor_user_id): string
+	{
+		if (! function_exists('wc_get_order') || ! function_exists('wc_get_order_statuses')) {
+			return '';
+		}
+
+		$order = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return '';
+		}
+
+		$target_status = $this->resolvePackedStatusSlug();
+		$current_status = (string) $order->get_status();
+
+		if ('' === $target_status || $target_status === $current_status) {
+			return $current_status;
+		}
+
+		$order->update_status(
+			$target_status,
+			__('Stav bol automaticky nastavený na Zabalená po dokončení balenia.', 'ar-design-reporting'),
+			true
+		);
+
+		$this->audit_logger->log(
+			'order_status_set_to_packed',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array('woocommerce_status' => $current_status),
+			array('woocommerce_status' => $target_status),
+			array('source' => 'manual_packed')
+		);
+
+		return $target_status;
+	}
+
+	private function resolvePackedStatusSlug(): string
+	{
+		$statuses = wc_get_order_statuses();
+
+		if (! is_array($statuses) || empty($statuses)) {
+			return '';
+		}
+
+		foreach ($statuses as $status_key => $label) {
+			$key   = (string) $status_key;
+			$title = trim(wp_strip_all_tags((string) $label));
+			$slug  = 0 === strpos($key, 'wc-') ? substr($key, 3) : $key;
+
+			if ('zabalena' === $slug || 'Zabalená' === $title || 'Zabalena' === $title) {
+				return $slug;
+			}
 		}
 
 		return '';
