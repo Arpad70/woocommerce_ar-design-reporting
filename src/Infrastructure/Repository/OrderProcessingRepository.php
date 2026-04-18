@@ -160,7 +160,7 @@ class OrderProcessingRepository
 
 		$totals_sql = "SELECT COUNT(*) FROM {$table}{$where_sql}";
 		$kpi_sql    = "SELECT COUNT(*) FROM {$table}{$where_sql}" . (! empty($where_parts) ? ' AND' : ' WHERE') . " is_kpi_included = 1";
-		$done_sql   = "SELECT COUNT(*) FROM {$table}{$where_sql}" . (! empty($where_parts) ? ' AND' : ' WHERE') . " status IN ('na-odoslanie', 'odoslana', 'packed', 'completed')";
+		$done_sql   = "SELECT COUNT(*) FROM {$table}{$where_sql}" . (! empty($where_parts) ? ' AND' : ' WHERE') . " status IN ('vybavena', 'completed')";
 
 		if (! empty($params)) {
 			$totals_sql = $wpdb->prepare($totals_sql, $params);
@@ -185,7 +185,7 @@ class OrderProcessingRepository
 		$table = $this->tables->orderProcessing();
 		$where_parts = array(
 			'processing_seconds IS NOT NULL',
-			"status IN ('na-odoslanie', 'odoslana', 'packed', 'completed')",
+			"status IN ('vybavena', 'completed')",
 		);
 		$params = array();
 		$this->appendDateRangeFilter($where_parts, $params, $filters);

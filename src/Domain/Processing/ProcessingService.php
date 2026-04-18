@@ -98,13 +98,14 @@ final class ProcessingService
 	{
 		$record     = $this->ensureRecord($order_id);
 		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
+		$current_status = ! empty($record['status']) ? (string) $record['status'] : 'processing';
 
 		$this->order_processing_repository->updateByOrderId(
 			$order_id,
 			array(
 				'owner_user_id'  => $actor_user_id,
 				'started_at_gmt' => $started_at,
-				'status'         => 'processing',
+				'status'         => $current_status,
 				'source_trigger' => 'manual_take_over',
 				'updated_at_gmt' => current_time('mysql', true),
 			)
@@ -123,7 +124,7 @@ final class ProcessingService
 			array(
 				'owner_user_id'  => $actor_user_id,
 				'started_at_gmt' => $started_at,
-				'status'         => 'processing',
+				'status'         => $current_status,
 			),
 			array('source' => 'manual_take_over')
 		);
@@ -143,16 +144,53 @@ final class ProcessingService
 		$this->order_processing_repository->updateByOrderId(
 			$order_id,
 			array(
+				'status'         => 'zabalena',
+				'source_trigger' => 'manual_packed',
+				'updated_at_gmt' => $finished_at,
+			)
+		);
+
+		$this->audit_logger->log(
+			'order_packed',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array(
+				'status' => $record['status'] ?? null,
+			),
+			array(
+				'status' => 'zabalena',
+			),
+			array('source' => 'manual_packed')
+		);
+	}
+
+	public function completeFulfillment(int $order_id, int $actor_user_id): void
+	{
+		$record = $this->ensureRecord($order_id);
+		if (empty($record)) {
+			return;
+		}
+
+		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
+		$finished_at = current_time('mysql', true);
+		$processing_seconds = $this->calculateProcessingSeconds($started_at, $finished_at);
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'owner_user_id'      => $actor_user_id,
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'odoslana',
-				'source_trigger'     => 'manual_finish',
+				'status'             => 'vybavena',
+				'source_trigger'     => 'manual_fulfillment',
 				'updated_at_gmt'     => $finished_at,
 			)
 		);
 
 		$this->audit_logger->log(
-			'order_processing_finished',
+			'order_fulfilled',
 			'order',
 			$order_id,
 			$order_id,
@@ -163,15 +201,14 @@ final class ProcessingService
 				'status'             => $record['status'] ?? null,
 			),
 			array(
-				'started_at_gmt'     => $started_at,
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'odoslana',
+				'status'             => 'vybavena',
 			),
-			array('source' => 'manual_finish')
+			array('source' => 'manual_fulfillment')
 		);
 
-		$this->updateWooOrderToShippedStatus($order_id, $actor_user_id);
+		$this->updateWooOrderToFulfilledStatus($order_id, $actor_user_id);
 	}
 
 	/**
@@ -226,7 +263,7 @@ final class ProcessingService
 		}
 	}
 
-	private function updateWooOrderToShippedStatus(int $order_id, int $actor_user_id): void
+	private function updateWooOrderToFulfilledStatus(int $order_id, int $actor_user_id): void
 	{
 		if (! function_exists('wc_get_order') || ! function_exists('wc_get_order_statuses')) {
 			return;
@@ -238,7 +275,7 @@ final class ProcessingService
 			return;
 		}
 
-		$target_status = $this->resolveShippedStatusSlug();
+		$target_status = $this->resolveFulfilledStatusSlug();
 		$current_status = (string) $order->get_status();
 
 		if ('' === $target_status || $target_status === $current_status) {
@@ -247,23 +284,23 @@ final class ProcessingService
 
 		$order->update_status(
 			$target_status,
-			__('Stav bol automaticky nastavený na Odoslaná po dokončení balenia v AR workflow.', 'ar-design-reporting'),
+			__('Stav bol automaticky nastavený na Vybavená po dokončení workflow.', 'ar-design-reporting'),
 			true
 		);
 
 		$this->audit_logger->log(
-			'order_status_set_to_shipped',
+			'order_status_set_to_fulfilled',
 			'order',
 			$order_id,
 			$order_id,
 			$actor_user_id,
 			array('woocommerce_status' => $current_status),
 			array('woocommerce_status' => $target_status),
-			array('source' => 'manual_finish')
+			array('source' => 'manual_fulfillment')
 		);
 	}
 
-	private function resolveShippedStatusSlug(): string
+	private function resolveFulfilledStatusSlug(): string
 	{
 		$statuses = wc_get_order_statuses();
 
@@ -276,7 +313,7 @@ final class ProcessingService
 			$title = trim(wp_strip_all_tags((string) $label));
 			$slug  = 0 === strpos($key, 'wc-') ? substr($key, 3) : $key;
 
-			if ('odoslana' === $slug || 'Odoslaná' === $title || 'Odoslana' === $title) {
+			if ('vybavena' === $slug || 'Vybavená' === $title || 'Vybavena' === $title) {
 				return $slug;
 			}
 		}

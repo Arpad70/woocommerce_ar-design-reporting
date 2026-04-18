@@ -31,6 +31,7 @@ final class WorkflowActions
 	{
 		add_action('admin_post_ard_take_over_order', array($this, 'handleTakeOver'));
 		add_action('admin_post_ard_finish_processing', array($this, 'handleFinishProcessing'));
+		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
 		add_action('admin_post_ard_send_digest_now', array($this, 'handleSendDigestNow'));
@@ -64,6 +65,21 @@ final class WorkflowActions
 		}
 
 		$this->redirectBack('finish_processing', $order_id, 0, $redirect_to);
+	}
+
+	public function handleCompleteFulfillment(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_complete_fulfillment');
+
+		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+
+		if ($order_id > 0) {
+			$this->processing_service->completeFulfillment($order_id, get_current_user_id());
+		}
+
+		$this->redirectBack('complete_fulfillment', $order_id, 0, $redirect_to);
 	}
 
 	public function handleExportCsv(): void

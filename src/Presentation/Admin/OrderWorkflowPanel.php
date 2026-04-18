@@ -65,7 +65,15 @@ final class OrderWorkflowPanel
 		echo '<input type="hidden" name="action" value="ard_finish_processing" />';
 		echo '<input type="hidden" name="order_id" value="' . esc_attr( (string) $order_id ) . '" />';
 		echo '<input type="hidden" name="redirect_to" value="' . esc_attr( $current_url ) . '" />';
-		submit_button( __( 'Označiť ako Odoslaná', 'ar-design-reporting' ), 'secondary', 'submit', false );
+		submit_button( __( 'Označiť ako Zabalená', 'ar-design-reporting' ), 'secondary', 'submit', false );
+		echo '</form>';
+
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;">';
+		wp_nonce_field( 'ard_complete_fulfillment' );
+		echo '<input type="hidden" name="action" value="ard_complete_fulfillment" />';
+		echo '<input type="hidden" name="order_id" value="' . esc_attr( (string) $order_id ) . '" />';
+		echo '<input type="hidden" name="redirect_to" value="' . esc_attr( $current_url ) . '" />';
+		submit_button( __( 'Označiť ako Vybavená', 'ar-design-reporting' ), 'secondary', 'submit', false );
 		echo '</form>';
 
 		echo '</div>';

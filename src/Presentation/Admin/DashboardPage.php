@@ -91,8 +91,8 @@ final class DashboardPage
 		echo '<option value="new"' . selected('new', $export_status, false) . '>new</option>';
 		echo '<option value="processing"' . selected('processing', $export_status, false) . '>processing</option>';
 		echo '<option value="na-odoslanie"' . selected('na-odoslanie', $export_status, false) . '>na-odoslanie</option>';
-		echo '<option value="odoslana"' . selected('odoslana', $export_status, false) . '>odoslana</option>';
-		echo '<option value="completed"' . selected('completed', $export_status, false) . '>completed</option>';
+		echo '<option value="zabalena"' . selected('zabalena', $export_status, false) . '>zabalena</option>';
+		echo '<option value="vybavena"' . selected('vybavena', $export_status, false) . '>vybavena</option>';
 		echo '</select></p>';
 		echo '<p><label for="ard-dashboard-classification">' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</label><br />';
 		echo '<select id="ard-dashboard-classification" name="classification">';
@@ -243,9 +243,8 @@ final class DashboardPage
 		echo '<option value="new"' . selected('new', $export_status, false) . '>new</option>';
 		echo '<option value="processing"' . selected('processing', $export_status, false) . '>processing</option>';
 		echo '<option value="na-odoslanie"' . selected('na-odoslanie', $export_status, false) . '>na-odoslanie</option>';
-		echo '<option value="odoslana"' . selected('odoslana', $export_status, false) . '>odoslana</option>';
-		echo '<option value="packed"' . selected('packed', $export_status, false) . '>packed</option>';
-		echo '<option value="completed"' . selected('completed', $export_status, false) . '>completed</option>';
+		echo '<option value="zabalena"' . selected('zabalena', $export_status, false) . '>zabalena</option>';
+		echo '<option value="vybavena"' . selected('vybavena', $export_status, false) . '>vybavena</option>';
 		echo '</select></p>';
 		echo '<p><label for="ard-export-classification">' . esc_html__('Klasifikace', 'ar-design-reporting') . '</label></p>';
 		echo '<p><select id="ard-export-classification" name="classification" class="regular-text">';
@@ -505,9 +504,9 @@ final class DashboardPage
 				'new'          => __('Nová', 'ar-design-reporting'),
 				'processing'   => __('Ve zpracování', 'ar-design-reporting'),
 				'na-odoslanie' => __('Na odoslanie', 'ar-design-reporting'),
-				'odoslana'     => __('Odoslaná', 'ar-design-reporting'),
-				'packed'       => __('Zabalená', 'ar-design-reporting'),
-				'completed'    => __('Dokončeno', 'ar-design-reporting'),
+				'zabalena'     => __('Zabalená', 'ar-design-reporting'),
+				'vybavena'     => __('Vybavená', 'ar-design-reporting'),
+				'completed'    => __('Vybavená', 'ar-design-reporting'),
 			);
 
 			return $labels[(string) $value] ?? (string) $value;
@@ -518,7 +517,8 @@ final class DashboardPage
 				'woocommerce_new_order'            => __('Automaticky při vytvoření objednávky', 'ar-design-reporting'),
 				'woocommerce_order_status_changed' => __('Automaticky při změně stavu objednávky', 'ar-design-reporting'),
 				'manual_take_over'                 => __('Ruční převzetí objednávky', 'ar-design-reporting'),
-				'manual_finish'                    => __('Ruční dokončení balení', 'ar-design-reporting'),
+				'manual_packed'                    => __('Ruční označení objednávky jako zabalené', 'ar-design-reporting'),
+				'manual_fulfillment'               => __('Ruční označení objednávky jako vybavené', 'ar-design-reporting'),
 			);
 
 			return $labels[(string) $value] ?? (string) $value;
