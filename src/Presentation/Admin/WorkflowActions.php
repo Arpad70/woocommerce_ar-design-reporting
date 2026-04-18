@@ -120,15 +120,74 @@ final class WorkflowActions
 			$args['sent'] = $sent;
 		}
 
-		$base_url = '' !== $redirect_to ? wp_validate_redirect($redirect_to, '') : '';
-
-		if ('' === $base_url) {
-			$base_url = add_query_arg(array('page' => 'ar-design-reporting'), admin_url('admin.php'));
-		}
+		$base_url = $this->resolveAdminRedirect($redirect_to, $order_id);
 
 		$url = add_query_arg($args, $base_url);
 
 		wp_safe_redirect($url);
 		exit;
+	}
+
+	private function resolveAdminRedirect(string $redirect_to, int $order_id): string
+	{
+		$candidates = array();
+
+		if ('' !== $redirect_to) {
+			$candidates[] = wp_validate_redirect($redirect_to, '');
+		}
+
+		$referer = wp_get_referer();
+		if (is_string($referer) && '' !== $referer) {
+			$candidates[] = wp_validate_redirect($referer, '');
+		}
+
+		foreach ($candidates as $candidate) {
+			if (! is_string($candidate) || '' === $candidate) {
+				continue;
+			}
+
+			$path = (string) wp_parse_url($candidate, PHP_URL_PATH);
+
+			if (false !== strpos($path, '/wp-admin/')) {
+				return $candidate;
+			}
+		}
+
+		$order_url = $this->getOrderEditUrl($order_id);
+
+		if ('' !== $order_url) {
+			return $order_url;
+		}
+
+		return add_query_arg(array('page' => 'ar-design-reporting'), admin_url('admin.php'));
+	}
+
+	private function getOrderEditUrl(int $order_id): string
+	{
+		if ($order_id <= 0) {
+			return '';
+		}
+
+		if (
+			class_exists(\Automattic\WooCommerce\Utilities\OrderUtil::class) &&
+			\Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled()
+		) {
+			return add_query_arg(
+				array(
+					'page'   => 'wc-orders',
+					'action' => 'edit',
+					'id'     => $order_id,
+				),
+				admin_url('admin.php')
+			);
+		}
+
+		return add_query_arg(
+			array(
+				'post'   => $order_id,
+				'action' => 'edit',
+			),
+			admin_url('post.php')
+		);
 	}
 }
