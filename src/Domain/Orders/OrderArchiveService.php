@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace ArDesign\Reporting\Domain\Orders;
 
 use ArDesign\Reporting\Domain\Audit\AuditLogger;
-use ArDesign\Reporting\Infrastructure\Database\Tables;
+use ArDesign\Reporting\Infrastructure\Repository\OrderArchiveRepository;
 
 final class OrderArchiveService
 {
-	private Tables $tables;
+	private OrderArchiveRepository $order_archive_repository;
 
 	private AuditLogger $audit_logger;
 
@@ -18,16 +18,14 @@ final class OrderArchiveService
 	 */
 	private array $archived_in_request = array();
 
-	public function __construct( Tables $tables, AuditLogger $audit_logger )
+	public function __construct( OrderArchiveRepository $order_archive_repository, AuditLogger $audit_logger )
 	{
-		$this->tables       = $tables;
-		$this->audit_logger = $audit_logger;
+		$this->order_archive_repository = $order_archive_repository;
+		$this->audit_logger             = $audit_logger;
 	}
 
-	public function archiveBeforeDelete( int $order_id, ?int $actor_user_id = null ): void
+	public function archiveBeforeDelete( int $order_id, ?int $actor_user_id = null, string $reason = 'deleted' ): void
 	{
-		global $wpdb;
-
 		if ( $order_id <= 0 || isset( $this->archived_in_request[ $order_id ] ) ) {
 			return;
 		}
@@ -38,6 +36,12 @@ final class OrderArchiveService
 			return;
 		}
 
+		$reason = sanitize_key( $reason );
+
+		if ( ! in_array( $reason, array( 'deleted', 'trash' ), true ) ) {
+			$reason = 'deleted';
+		}
+
 		$snapshot = $this->buildSnapshot( $order );
 		$snapshot_json = wp_json_encode( $snapshot );
 
@@ -45,19 +49,17 @@ final class OrderArchiveService
 			return;
 		}
 
-		$inserted = $wpdb->insert(
-			$this->tables->orderArchive(),
+		$inserted = $this->order_archive_repository->insertArchive(
 			array(
 				'order_id'       => $order_id,
-				'archive_reason' => 'deleted',
+				'archive_reason' => $reason,
 				'snapshot_json'  => $snapshot_json,
 				'actor_user_id'  => $actor_user_id,
 				'created_at_gmt' => current_time( 'mysql', true ),
-			),
-			array( '%d', '%s', '%s', '%d', '%s' )
+			)
 		);
 
-		if ( false === $inserted ) {
+		if ( ! $inserted ) {
 			return;
 		}
 
@@ -71,12 +73,32 @@ final class OrderArchiveService
 			$actor_user_id,
 			array(),
 			array(
-				'archive_reason' => 'deleted',
+				'archive_reason' => $reason,
 			),
 			array(
 				'source' => 'order_delete_hook',
 			)
 		);
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getRecentArchivesForOrder( int $order_id, int $limit = 10 ): array
+	{
+		$rows = $this->order_archive_repository->getRecentByOrderId( $order_id, $limit );
+
+		return $this->mapArchiveRows( $rows );
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getRecentDeletedArchives( int $limit = 20 ): array
+	{
+		$rows = $this->order_archive_repository->getRecentDeleted( $limit );
+
+		return $this->mapArchiveRows( $rows );
 	}
 
 	/**
@@ -127,5 +149,30 @@ final class OrderArchiveService
 		}
 
 		return gmdate( 'Y-m-d H:i:s', $date->getTimestamp() );
+	}
+
+	/**
+	 * @param array<int, array<string, mixed>> $rows
+	 * @return array<int, array<string, mixed>>
+	 */
+	private function mapArchiveRows( array $rows ): array
+	{
+		$mapped = array();
+
+		foreach ( $rows as $row ) {
+			$snapshot_json = isset( $row['snapshot_json'] ) ? (string) $row['snapshot_json'] : '';
+			$snapshot      = json_decode( $snapshot_json, true );
+
+			$mapped[] = array(
+				'id'            => (int) ( $row['id'] ?? 0 ),
+				'order_id'      => (int) ( $row['order_id'] ?? 0 ),
+				'archive_reason'=> (string) ( $row['archive_reason'] ?? '' ),
+				'actor_user_id' => isset( $row['actor_user_id'] ) ? (int) $row['actor_user_id'] : null,
+				'created_at_gmt'=> (string) ( $row['created_at_gmt'] ?? '' ),
+				'snapshot'      => is_array( $snapshot ) ? $snapshot : array(),
+			);
+		}
+
+		return $mapped;
 	}
 }

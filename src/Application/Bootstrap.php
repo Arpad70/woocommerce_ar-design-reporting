@@ -8,6 +8,7 @@ use ArDesign\Reporting\Infrastructure\Database\Migrator;
 use ArDesign\Reporting\Infrastructure\Scheduler\DigestScheduler;
 use ArDesign\Reporting\Integration\WooCommerce\Compatibility;
 use ArDesign\Reporting\Presentation\Admin\Menu;
+use ArDesign\Reporting\Presentation\Admin\OrderWorkflowPanel;
 use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
@@ -53,6 +54,7 @@ final class Bootstrap
 		add_action( 'admin_menu', array( $this, 'registerAdminMenu' ) );
 		add_action( 'init', array( $this, 'registerHooks' ) );
 		add_action( 'admin_init', array( $this, 'registerAdminActions' ) );
+		add_action( 'admin_init', array( $this, 'registerOrderPanels' ) );
 		add_action( 'init', array( $this, 'registerUpdaters' ) );
 		add_action( 'init', array( $this, 'registerRollbackManager' ) );
 		$this->registerSchedulers();
@@ -77,6 +79,11 @@ final class Bootstrap
 	public function registerAdminActions(): void
 	{
 		$this->container->get( WorkflowActions::class )->register();
+	}
+
+	public function registerOrderPanels(): void
+	{
+		$this->container->get( OrderWorkflowPanel::class )->register();
 	}
 
 	public function registerSchedulers(): void
@@ -146,17 +153,27 @@ final class Bootstrap
 
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 
-		if ( null === $screen || false === strpos( (string) $screen->id, 'ar-design-reporting' ) ) {
+		if ( null === $screen ) {
 			return;
 		}
 
-		echo '<div class="notice notice-info"><p>';
-		echo esc_html__( 'Plugin AR Design Reporting má pripravený rozšírený skeleton pre HPOS-first reporting, audit a workflow metadata.', 'ar-design-reporting' );
-		echo '</p></div>';
+		$screen_id          = (string) $screen->id;
+		$is_reporting_screen = false !== strpos( $screen_id, 'ar-design-reporting' );
+		$is_order_screen     = false !== strpos( $screen_id, 'shop-order' ) || false !== strpos( $screen_id, 'wc-orders' );
 
-		if ( isset( $_GET['ard_admin'], $_GET['order_id'] ) && is_string( $_GET['ard_admin'] ) ) {
+		if ( ! $is_reporting_screen && ! $is_order_screen ) {
+			return;
+		}
+
+		if ( $is_reporting_screen ) {
+			echo '<div class="notice notice-info"><p>';
+			echo esc_html__( 'Plugin AR Design Reporting má pripravený rozšírený skeleton pre HPOS-first reporting, audit a workflow metadata.', 'ar-design-reporting' );
+			echo '</p></div>';
+		}
+
+		if ( isset( $_GET['ard_admin'] ) && is_string( $_GET['ard_admin'] ) ) {
 			$action   = sanitize_key( wp_unslash( $_GET['ard_admin'] ) );
-			$order_id = absint( wp_unslash( $_GET['order_id'] ) );
+			$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
 			$message  = '';
 
 			if ( 'take_over' === $action ) {

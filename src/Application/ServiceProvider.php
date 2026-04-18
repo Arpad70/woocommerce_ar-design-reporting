@@ -17,11 +17,13 @@ use ArDesign\Reporting\Infrastructure\Database\Schema;
 use ArDesign\Reporting\Infrastructure\Database\Tables;
 use ArDesign\Reporting\Infrastructure\Repository\AuditLogRepository;
 use ArDesign\Reporting\Infrastructure\Repository\EmailReportRepository;
+use ArDesign\Reporting\Infrastructure\Repository\OrderArchiveRepository;
 use ArDesign\Reporting\Infrastructure\Repository\OrderProcessingRepository;
 use ArDesign\Reporting\Infrastructure\Scheduler\DigestScheduler;
 use ArDesign\Reporting\Integration\WooCommerce\Compatibility;
 use ArDesign\Reporting\Presentation\Admin\DashboardPage;
 use ArDesign\Reporting\Presentation\Admin\Menu;
+use ArDesign\Reporting\Presentation\Admin\OrderWorkflowPanel;
 use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
@@ -37,6 +39,7 @@ final class ServiceProvider
 		$container->set( Schema::class, static fn ( Container $c ): Schema => new Schema( $c->get( Tables::class ) ) );
 		$container->set( Migrator::class, static fn ( Container $c ): Migrator => new Migrator( $c->get( Tables::class ), $c->get( Schema::class ) ) );
 		$container->set( OrderProcessingRepository::class, static fn ( Container $c ): OrderProcessingRepository => new OrderProcessingRepository( $c->get( Tables::class ) ) );
+		$container->set( OrderArchiveRepository::class, static fn ( Container $c ): OrderArchiveRepository => new OrderArchiveRepository( $c->get( Tables::class ) ) );
 		$container->set( EmailReportRepository::class, static fn ( Container $c ): EmailReportRepository => new EmailReportRepository( $c->get( Tables::class ) ) );
 		$container->set( AuditLogRepository::class, static fn ( Container $c ): AuditLogRepository => new AuditLogRepository( $c->get( Tables::class ) ) );
 		$container->set( Compatibility::class, static fn (): Compatibility => new Compatibility() );
@@ -45,7 +48,7 @@ final class ServiceProvider
 		$container->set(
 			OrderArchiveService::class,
 			static fn ( Container $c ): OrderArchiveService => new OrderArchiveService(
-				$c->get( Tables::class ),
+				$c->get( OrderArchiveRepository::class ),
 				$c->get( AuditLogger::class )
 			)
 		);
@@ -114,10 +117,18 @@ final class ServiceProvider
 				$c->get( ExportManager::class ),
 				$c->get( EmailReporter::class ),
 				$c->get( ProcessingService::class ),
+				$c->get( OrderArchiveService::class ),
 				$c->get( 'plugin.meta' )
 			)
 		);
 		$container->set( Menu::class, static fn ( Container $c ): Menu => new Menu( $c->get( DashboardPage::class ) ) );
+		$container->set(
+			OrderWorkflowPanel::class,
+			static fn ( Container $c ): OrderWorkflowPanel => new OrderWorkflowPanel(
+				$c->get( ProcessingService::class ),
+				$c->get( OrderArchiveService::class )
+			)
+		);
 		$container->set(
 			WorkflowActions::class,
 			static fn ( Container $c ): WorkflowActions => new WorkflowActions(

@@ -41,13 +41,14 @@ final class WorkflowActions
 		$this->ensurePermissions();
 		check_admin_referer('ard_take_over_order');
 
-		$order_id = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
 
 		if ($order_id > 0) {
 			$this->processing_service->takeOverOrder($order_id, get_current_user_id());
 		}
 
-		$this->redirectBack('take_over', $order_id);
+		$this->redirectBack('take_over', $order_id, 0, $redirect_to);
 	}
 
 	public function handleFinishProcessing(): void
@@ -55,13 +56,14 @@ final class WorkflowActions
 		$this->ensurePermissions();
 		check_admin_referer('ard_finish_processing');
 
-		$order_id = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
 
 		if ($order_id > 0) {
 			$this->processing_service->finishProcessing($order_id, get_current_user_id());
 		}
 
-		$this->redirectBack('finish_processing', $order_id);
+		$this->redirectBack('finish_processing', $order_id, 0, $redirect_to);
 	}
 
 	public function handleExportCsv(): void
@@ -106,12 +108,9 @@ final class WorkflowActions
 		}
 	}
 
-	private function redirectBack(string $action, int $order_id = 0, int $sent = 0): void
+	private function redirectBack(string $action, int $order_id = 0, int $sent = 0, string $redirect_to = ''): void
 	{
-		$args = array(
-			'page'      => 'ar-design-reporting',
-			'ard_admin' => $action,
-		);
+		$args = array('ard_admin' => $action);
 
 		if ($order_id > 0) {
 			$args['order_id'] = $order_id;
@@ -121,7 +120,13 @@ final class WorkflowActions
 			$args['sent'] = $sent;
 		}
 
-		$url = add_query_arg($args, admin_url('admin.php'));
+		$base_url = '' !== $redirect_to ? wp_validate_redirect($redirect_to, '') : '';
+
+		if ('' === $base_url) {
+			$base_url = add_query_arg(array('page' => 'ar-design-reporting'), admin_url('admin.php'));
+		}
+
+		$url = add_query_arg($args, $base_url);
 
 		wp_safe_redirect($url);
 		exit;

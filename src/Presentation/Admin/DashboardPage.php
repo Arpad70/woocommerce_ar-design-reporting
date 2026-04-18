@@ -7,6 +7,7 @@ namespace ArDesign\Reporting\Presentation\Admin;
 use ArDesign\Reporting\Application\Emails\EmailReporter;
 use ArDesign\Reporting\Application\Exports\ExportManager;
 use ArDesign\Reporting\Application\Reports\DashboardQueryService;
+use ArDesign\Reporting\Domain\Orders\OrderArchiveService;
 use ArDesign\Reporting\Domain\Processing\ProcessingService;
 
 final class DashboardPage
@@ -18,6 +19,8 @@ final class DashboardPage
 	private EmailReporter $email_reporter;
 
 	private ProcessingService $processing_service;
+
+	private OrderArchiveService $order_archive_service;
 
 	/**
 	 * @var array<string, string>
@@ -32,12 +35,14 @@ final class DashboardPage
 		ExportManager $export_manager,
 		EmailReporter $email_reporter,
 		ProcessingService $processing_service,
+		OrderArchiveService $order_archive_service,
 		array $plugin_meta
 	) {
 		$this->dashboard_query_service = $dashboard_query_service;
 		$this->export_manager          = $export_manager;
 		$this->email_reporter          = $email_reporter;
 		$this->processing_service      = $processing_service;
+		$this->order_archive_service   = $order_archive_service;
 		$this->plugin_meta             = $plugin_meta;
 	}
 
@@ -60,6 +65,8 @@ final class DashboardPage
 		$export_date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
 		$export_date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
 		$workflow     = $sample_order > 0 ? $this->processing_service->getWorkflowSummary($sample_order) : array();
+		$order_archives = $sample_order > 0 ? $this->order_archive_service->getRecentArchivesForOrder($sample_order, 10) : array();
+		$recent_deleted_archives = $this->order_archive_service->getRecentDeletedArchives(20);
 
 		echo '<div class="wrap">';
 		echo '<h1>' . esc_html__('AR Design Reporting', 'ar-design-reporting') . '</h1>';
@@ -194,28 +201,7 @@ final class DashboardPage
 		echo '</table>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Workflow akce', 'ar-design-reporting') . '</h2>';
-		echo '<p>' . esc_html__('První verze workflow akcí je dostupná přímo z dashboardu přes order ID. Slouží jako bezpečný základ pro další integraci do WooCommerce administrace.', 'ar-design-reporting') . '</p>';
-		echo '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">';
-
-		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;min-width:320px;">';
-		wp_nonce_field('ard_take_over_order');
-		echo '<input type="hidden" name="action" value="ard_take_over_order" />';
-		echo '<h3 style="margin-top:0;">' . esc_html__('Převzít objednávku', 'ar-design-reporting') . '</h3>';
-		echo '<p><label for="ard-take-over-order-id">' . esc_html__('Order ID', 'ar-design-reporting') . '</label></p>';
-		echo '<p><input id="ard-take-over-order-id" type="number" min="1" name="order_id" value="" class="regular-text" /></p>';
-		submit_button(__('Převzít do zpracování', 'ar-design-reporting'), 'primary', 'submit', false);
-		echo '</form>';
-
-		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;min-width:320px;">';
-		wp_nonce_field('ard_finish_processing');
-		echo '<input type="hidden" name="action" value="ard_finish_processing" />';
-		echo '<h3 style="margin-top:0;">' . esc_html__('Dokončit balení', 'ar-design-reporting') . '</h3>';
-		echo '<p><label for="ard-finish-order-id">' . esc_html__('Order ID', 'ar-design-reporting') . '</label></p>';
-		echo '<p><input id="ard-finish-order-id" type="number" min="1" name="order_id" value="" class="regular-text" /></p>';
-		submit_button(__('Označit jako zabalené', 'ar-design-reporting'), 'secondary', 'submit', false);
-		echo '</form>';
-
-		echo '</div>';
+		echo '<p>' . esc_html__('Workflow akce sú presunuté priamo do administrácie konkrétnej objednávky (detail objednávky vo WooCommerce).', 'ar-design-reporting') . '</p>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Workflow detail objednávky', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Pro rychlou kontrolu lze otevřít dashboard s parametrem `order_id` a zobrazit uložená workflow metadata.', 'ar-design-reporting') . '</p>';
@@ -243,10 +229,59 @@ final class DashboardPage
 
 			echo '</tbody>';
 			echo '</table>';
+
+			echo '<h3 style="margin-top:16px;">' . esc_html__('Archivácie pre zadanú objednávku', 'ar-design-reporting') . '</h3>';
+
+			if (empty($order_archives)) {
+				echo '<p>' . esc_html__('Pre túto objednávku zatiaľ neexistuje archivácia.', 'ar-design-reporting') . '</p>';
+			} else {
+				echo '<table class="widefat striped" style="max-width:960px;">';
+				echo '<thead><tr><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Dôvod', 'ar-design-reporting') . '</th><th>' . esc_html__('Snapshot', 'ar-design-reporting') . '</th></tr></thead>';
+				echo '<tbody>';
+
+				foreach ($order_archives as $archive) {
+					$snapshot = isset($archive['snapshot']) && is_array($archive['snapshot']) ? $archive['snapshot'] : array();
+					$snapshot_json = wp_json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+					echo '<tr>';
+					echo '<td>' . esc_html((string) ($archive['created_at_gmt'] ?? '')) . '</td>';
+					echo '<td>' . esc_html((string) ($archive['archive_reason'] ?? '')) . '</td>';
+					echo '<td><details><summary>' . esc_html__('Zobraziť', 'ar-design-reporting') . '</summary><pre style="white-space:pre-wrap;max-width:640px;">' . esc_html(is_string($snapshot_json) ? $snapshot_json : '') . '</pre></details></td>';
+					echo '</tr>';
+				}
+
+				echo '</tbody>';
+				echo '</table>';
+			}
 		}
 
-		echo '<h2 style="margin-top:24px;">' . esc_html__('Další doporučený krok', 'ar-design-reporting') . '</h2>';
-		echo '<p>' . esc_html__('Další krok je přesunout workflow akce přímo do order administrace a doplnit archivaci smazaných objednávek.', 'ar-design-reporting') . '</p>';
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Posledné archivácie zmazaných objednávok', 'ar-design-reporting') . '</h2>';
+
+		if (empty($recent_deleted_archives)) {
+			echo '<p>' . esc_html__('Zatiaľ nebola zaznamenaná žiadna archivácia zmazanej objednávky.', 'ar-design-reporting') . '</p>';
+		} else {
+			echo '<table class="widefat striped" style="max-width:960px;">';
+			echo '<thead><tr><th>' . esc_html__('Order ID', 'ar-design-reporting') . '</th><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Snapshot', 'ar-design-reporting') . '</th></tr></thead>';
+			echo '<tbody>';
+
+			foreach ($recent_deleted_archives as $archive) {
+				$snapshot = isset($archive['snapshot']) && is_array($archive['snapshot']) ? $archive['snapshot'] : array();
+				$snapshot_json = wp_json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+				echo '<tr>';
+				echo '<td>' . esc_html((string) ($archive['order_id'] ?? 0)) . '</td>';
+				echo '<td>' . esc_html((string) ($archive['created_at_gmt'] ?? '')) . '</td>';
+				echo '<td>' . esc_html((string) ($archive['actor_user_id'] ?? '')) . '</td>';
+				echo '<td><details><summary>' . esc_html__('Zobraziť', 'ar-design-reporting') . '</summary><pre style="white-space:pre-wrap;max-width:640px;">' . esc_html(is_string($snapshot_json) ? $snapshot_json : '') . '</pre></details></td>';
+				echo '</tr>';
+			}
+
+			echo '</tbody>';
+			echo '</table>';
+		}
+
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Ďalší krok', 'ar-design-reporting') . '</h2>';
+		echo '<p>' . esc_html__('Workflow akcie sú dostupné priamo v administrácii objednávky a archivácia zmazaných objednávok je dostupná v prehľade vyššie.', 'ar-design-reporting') . '</p>';
 		echo '</div>';
 	}
 
