@@ -91,6 +91,8 @@ final class DashboardPage
 		) : array();
 
 		echo '<div class="wrap">';
+		$this->renderDashboardStyles();
+		echo '<div class="ard-reporting-dashboard">';
 		echo '<h1>' . esc_html__('AR Design Reporting', 'ar-design-reporting') . '</h1>';
 		echo '<p>' . esc_html__('Dashboard zobrazuje objednávky, KPI, výkon zamestnancov a auditné udalosti podľa zvolených filtrov.', 'ar-design-reporting') . '</p>';
 		echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;max-width:1200px;margin-top:12px;">';
@@ -165,6 +167,7 @@ final class DashboardPage
 		echo '</ul>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('KPI snapshot', 'ar-design-reporting') . '</h2>';
+		$this->renderKpiCards($kpis);
 		echo '<table class="widefat striped" style="max-width:960px;">';
 		echo '<thead><tr><th>' . esc_html__('Metrika', 'ar-design-reporting') . '</th><th>' . esc_html__('Hodnota', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
@@ -488,6 +491,54 @@ final class DashboardPage
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Ďalší krok', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Workflow akcie sú dostupné priamo v administrácii objednávky a archivácia zmazaných objednávok je dostupná v prehľade vyššie.', 'ar-design-reporting') . '</p>';
 		echo '</div>';
+		echo '</div>';
+	}
+
+	/**
+	 * @param array<string, int|float> $kpis
+	 */
+	private function renderKpiCards(array $kpis): void
+	{
+		if (empty($kpis)) {
+			return;
+		}
+
+		echo '<div class="ard-kpi-grid">';
+
+		foreach ($kpis as $key => $value) {
+			echo '<div class="ard-kpi-card">';
+			echo '<div class="ard-kpi-label">' . esc_html($this->getKpiLabel((string) $key)) . '</div>';
+			echo '<div class="ard-kpi-value">' . esc_html($this->formatKpiValue((string) $key, $value)) . '</div>';
+			echo '</div>';
+		}
+
+		echo '</div>';
+	}
+
+	private function renderDashboardStyles(): void
+	{
+		echo '<style>
+		.ard-reporting-dashboard { max-width: 1320px; }
+		.ard-reporting-dashboard h1 { margin-bottom: 6px; }
+		.ard-reporting-dashboard h2 { margin-top: 28px !important; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #dcdcde; }
+		.ard-reporting-dashboard p { line-height: 1.45; }
+		.ard-reporting-dashboard form { border-radius: 8px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
+		.ard-reporting-dashboard .widefat { border-radius: 8px; overflow: hidden; }
+		.ard-reporting-dashboard .widefat thead th { background: #f7f7f7; font-weight: 600; }
+		.ard-reporting-dashboard .widefat td, .ard-reporting-dashboard .widefat th { padding: 10px 12px; vertical-align: top; }
+		.ard-reporting-dashboard input[type="date"],
+		.ard-reporting-dashboard input[type="number"],
+		.ard-reporting-dashboard input[type="email"],
+		.ard-reporting-dashboard select { min-height: 34px; border-radius: 6px; }
+		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
+		.ard-kpi-card { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 12px 14px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
+		.ard-kpi-label { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #50575e; margin-bottom: 6px; }
+		.ard-kpi-value { font-size: 24px; font-weight: 600; color: #1d2327; }
+		@media (max-width: 900px) {
+			.ard-reporting-dashboard .widefat { font-size: 12px; }
+			.ard-kpi-value { font-size: 20px; }
+		}
+		</style>';
 	}
 
 	private function getKpiLabel(string $key): string
