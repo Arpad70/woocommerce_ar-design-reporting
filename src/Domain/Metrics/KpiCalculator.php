@@ -26,7 +26,7 @@ final class KpiCalculator
 	 * @param array<string, string> $filters
 	 * @return array<string, int|float>
 	 */
-	public function getOverview(array $filters = array()): array
+	public function getOverview(array $filters = array(), float $manager_ready_avg_seconds = 0.0, float $overall_ready_avg_seconds = 0.0): array
 	{
 		$processing_counters = $this->order_processing_repository->getOverviewCounters($filters);
 		$avg_processing_seconds = $this->order_processing_repository->getAverageProcessingSeconds($filters);
@@ -45,6 +45,8 @@ final class KpiCalculator
 			'average_order_value'    => (float) ( $financials['average_order_value'] ?? 0.0 ),
 			'avg_processing_hours'   => $avg_processing_seconds > 0 ? round( $avg_processing_seconds / 3600, 2 ) : 0.0,
 			'orders_per_employee'    => $orders_per_employee > 0 ? round( $orders_per_employee, 2 ) : 0.0,
+			'avg_ready_for_packing_hours' => $overall_ready_avg_seconds > 0 ? round($overall_ready_avg_seconds / 3600, 2) : 0.0,
+			'avg_ready_for_packing_hours_manager' => $manager_ready_avg_seconds > 0 ? round($manager_ready_avg_seconds / 3600, 2) : 0.0,
 		);
 	}
 

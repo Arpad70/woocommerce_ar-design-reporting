@@ -55,6 +55,17 @@ if (! function_exists('get_current_user_id')) {
 	}
 }
 
+if (! function_exists('get_option')) {
+	/**
+	 * @param mixed $default
+	 * @return mixed
+	 */
+	function get_option(string $option, $default = false)
+	{
+		return $default;
+	}
+}
+
 if (! function_exists('get_post_meta')) {
 	/**
 	 * @param string|int $key

@@ -74,10 +74,21 @@ final class DashboardPage
 		$orders_overview = is_array($data['orders_overview'] ?? null) ? $data['orders_overview'] : array();
 		$employee_overview = is_array($data['employee_overview'] ?? null) ? $data['employee_overview'] : array();
 		$audit_overview = is_array($data['audit_overview'] ?? null) ? $data['audit_overview'] : array();
+		$manager_overview = is_array($data['manager_performance'] ?? null) ? $data['manager_performance'] : array();
+		$default_manager_user_id = (int) ($data['default_manager_user_id'] ?? 0);
 		$sample_order = isset($_GET['order_id']) ? absint(wp_unslash($_GET['order_id'])) : 0;
 		$workflow     = $sample_order > 0 ? $this->processing_service->getWorkflowSummary($sample_order) : array();
+		$timeline     = $sample_order > 0 ? $this->dashboard_query_service->getOrderTimeline($sample_order) : array();
 		$order_archives = $sample_order > 0 ? $this->order_archive_service->getRecentArchivesForOrder($sample_order, 10) : array();
 		$recent_deleted_archives = $this->order_archive_service->getRecentDeletedArchives(20);
+		$manager_candidates = function_exists('get_users') ? get_users(
+			array(
+				'role__in' => array('administrator', 'shop_manager'),
+				'fields'   => array('ID', 'display_name', 'user_login'),
+				'orderby'  => 'display_name',
+				'order'    => 'ASC',
+			)
+		) : array();
 
 		echo '<div class="wrap">';
 		echo '<h1>' . esc_html__('AR Design Reporting', 'ar-design-reporting') . '</h1>';
@@ -89,10 +100,15 @@ final class DashboardPage
 		echo '<select id="ard-dashboard-status" name="status">';
 		echo '<option value="">' . esc_html__('Všechny', 'ar-design-reporting') . '</option>';
 		echo '<option value="new"' . selected('new', $export_status, false) . '>new</option>';
+		echo '<option value="pending"' . selected('pending', $export_status, false) . '>pending</option>';
 		echo '<option value="processing"' . selected('processing', $export_status, false) . '>processing</option>';
+		echo '<option value="on-hold"' . selected('on-hold', $export_status, false) . '>on-hold</option>';
 		echo '<option value="na-odoslanie"' . selected('na-odoslanie', $export_status, false) . '>na-odoslanie</option>';
 		echo '<option value="zabalena"' . selected('zabalena', $export_status, false) . '>zabalena</option>';
 		echo '<option value="vybavena"' . selected('vybavena', $export_status, false) . '>vybavena</option>';
+		echo '<option value="failed"' . selected('failed', $export_status, false) . '>failed</option>';
+		echo '<option value="cancelled"' . selected('cancelled', $export_status, false) . '>cancelled</option>';
+		echo '<option value="refunded"' . selected('refunded', $export_status, false) . '>refunded</option>';
 		echo '</select></p>';
 		echo '<p><label for="ard-dashboard-classification">' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</label><br />';
 		echo '<select id="ard-dashboard-classification" name="classification">';
@@ -120,6 +136,27 @@ final class DashboardPage
 		echo '</tbody>';
 		echo '</table>';
 
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Nastavenie manažéra procesu', 'ar-design-reporting') . '</h2>';
+		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;max-width:560px;">';
+		wp_nonce_field('ard_save_default_manager');
+		echo '<input type="hidden" name="action" value="ard_save_default_manager" />';
+		echo '<p><label for="ard-default-manager-user">' . esc_html__('Predvolený manažér pre prechod do stavu Na odoslanie', 'ar-design-reporting') . '</label></p>';
+		echo '<p><select id="ard-default-manager-user" name="manager_user_id" class="regular-text">';
+		echo '<option value="0">' . esc_html__('Bez priradenia', 'ar-design-reporting') . '</option>';
+
+		foreach ($manager_candidates as $manager_user) {
+			if (! $manager_user instanceof \WP_User) {
+				continue;
+			}
+
+			$label = '' !== (string) $manager_user->display_name ? (string) $manager_user->display_name : (string) $manager_user->user_login;
+			echo '<option value="' . esc_attr((string) $manager_user->ID) . '"' . selected($default_manager_user_id, (int) $manager_user->ID, false) . '>' . esc_html($label . ' (#' . (int) $manager_user->ID . ')') . '</option>';
+		}
+
+		echo '</select></p>';
+		submit_button(__('Uložiť manažéra', 'ar-design-reporting'), 'secondary', 'submit', false);
+		echo '</form>';
+
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Připravené moduly', 'ar-design-reporting') . '</h2>';
 		echo '<ul style="list-style:disc;padding-left:18px;">';
 		echo '<li>' . esc_html__('Audit log a archivace smazaných objednávek', 'ar-design-reporting') . '</li>';
@@ -145,25 +182,52 @@ final class DashboardPage
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Prehľad objednávok', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Zoznam zobrazuje všetky objednávky v zvolenom filtri vrátane stavu, zodpovednej osoby a poslednej zmeny statusu.', 'ar-design-reporting') . '</p>';
 		echo '<table class="widefat striped" style="max-width:1200px;">';
-		echo '<thead><tr><th>' . esc_html__('Order ID', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Čas spracovania', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<thead><tr><th>' . esc_html__('Order ID', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
 		if (empty($orders_overview)) {
-			echo '<tr><td colspan="6">' . esc_html__('Pre zvolený filter nie sú dostupné žiadne objednávky.', 'ar-design-reporting') . '</td></tr>';
+			echo '<tr><td colspan="8">' . esc_html__('Pre zvolený filter nie sú dostupné žiadne objednávky.', 'ar-design-reporting') . '</td></tr>';
 		} else {
 			foreach ($orders_overview as $order_row) {
 				$order_id = (int) ($order_row['order_id'] ?? 0);
 				$owner_id = (int) ($order_row['owner_user_id'] ?? 0);
+				$manager_id = (int) ($order_row['manager_user_id'] ?? 0);
 				$last_actor_id = (int) ($order_row['last_status_change_actor'] ?? 0);
 				$processing_seconds = isset($order_row['processing_seconds']) ? (int) $order_row['processing_seconds'] : 0;
+				$ready_seconds = isset($order_row['ready_for_packing_seconds']) ? (int) $order_row['ready_for_packing_seconds'] : 0;
 
 				echo '<tr>';
 				echo '<td><a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html((string) $order_id) . '</a></td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('status', (string) ($order_row['status'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('classification', (string) ($order_row['classification'] ?? ''))) . '</td>';
+				echo '<td>' . esc_html($this->formatUserLabel($manager_id)) . '</td>';
 				echo '<td>' . esc_html($this->formatUserLabel($owner_id)) . '</td>';
 				echo '<td>' . esc_html($this->formatUserLabel($last_actor_id)) . ' / ' . esc_html($this->formatGmtDate((string) ($order_row['last_status_change_at_gmt'] ?? ''))) . '</td>';
+				echo '<td>' . esc_html($ready_seconds > 0 ? $this->formatDuration($ready_seconds) : __('Nevyplněno', 'ar-design-reporting')) . '</td>';
 				echo '<td>' . esc_html($processing_seconds > 0 ? $this->formatDuration($processing_seconds) : __('Nevyplněno', 'ar-design-reporting')) . '</td>';
+				echo '</tr>';
+			}
+		}
+
+		echo '</tbody>';
+		echo '</table>';
+
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Výkon manažéra (prechod do Na odoslanie)', 'ar-design-reporting') . '</h2>';
+		echo '<table class="widefat striped" style="max-width:960px;">';
+		echo '<thead><tr><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Počet objednávok', 'ar-design-reporting') . '</th><th>' . esc_html__('Priemer do Na odoslanie', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<tbody>';
+
+		if (empty($manager_overview)) {
+			echo '<tr><td colspan="3">' . esc_html__('Žiadne dáta pre KPI prechodu do Na odoslanie v zvolenom období.', 'ar-design-reporting') . '</td></tr>';
+		} else {
+			foreach ($manager_overview as $manager_row) {
+				$manager_id = (int) ($manager_row['manager_user_id'] ?? 0);
+				$count = (int) ($manager_row['orders_count'] ?? 0);
+				$avg_seconds = isset($manager_row['avg_ready_seconds']) ? (float) $manager_row['avg_ready_seconds'] : 0.0;
+				echo '<tr>';
+				echo '<td>' . esc_html($this->formatUserLabel($manager_id)) . '</td>';
+				echo '<td>' . esc_html((string) $count) . '</td>';
+				echo '<td>' . esc_html($avg_seconds > 0 ? $this->formatDuration((int) round($avg_seconds)) : __('Nevyplněno', 'ar-design-reporting')) . '</td>';
 				echo '</tr>';
 			}
 		}
@@ -241,10 +305,15 @@ final class DashboardPage
 		echo '<p><select id="ard-export-status" name="status" class="regular-text">';
 		echo '<option value="">' . esc_html__('Všechny', 'ar-design-reporting') . '</option>';
 		echo '<option value="new"' . selected('new', $export_status, false) . '>new</option>';
+		echo '<option value="pending"' . selected('pending', $export_status, false) . '>pending</option>';
 		echo '<option value="processing"' . selected('processing', $export_status, false) . '>processing</option>';
+		echo '<option value="on-hold"' . selected('on-hold', $export_status, false) . '>on-hold</option>';
 		echo '<option value="na-odoslanie"' . selected('na-odoslanie', $export_status, false) . '>na-odoslanie</option>';
 		echo '<option value="zabalena"' . selected('zabalena', $export_status, false) . '>zabalena</option>';
 		echo '<option value="vybavena"' . selected('vybavena', $export_status, false) . '>vybavena</option>';
+		echo '<option value="failed"' . selected('failed', $export_status, false) . '>failed</option>';
+		echo '<option value="cancelled"' . selected('cancelled', $export_status, false) . '>cancelled</option>';
+		echo '<option value="refunded"' . selected('refunded', $export_status, false) . '>refunded</option>';
 		echo '</select></p>';
 		echo '<p><label for="ard-export-classification">' . esc_html__('Klasifikace', 'ar-design-reporting') . '</label></p>';
 		echo '<p><select id="ard-export-classification" name="classification" class="regular-text">';
@@ -341,6 +410,31 @@ final class DashboardPage
 			echo '</tbody>';
 			echo '</table>';
 
+			echo '<h3 style="margin-top:16px;">' . esc_html__('Timeline práce s objednávkou', 'ar-design-reporting') . '</h3>';
+			echo '<table class="widefat striped" style="max-width:960px;">';
+			echo '<thead><tr><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Prechod', 'ar-design-reporting') . '</th><th>' . esc_html__('Dĺžka kroku', 'ar-design-reporting') . '</th></tr></thead>';
+			echo '<tbody>';
+
+			if (empty($timeline)) {
+				echo '<tr><td colspan="4">' . esc_html__('Pre túto objednávku zatiaľ nie sú dostupné statusové udalosti.', 'ar-design-reporting') . '</td></tr>';
+			} else {
+				foreach ($timeline as $timeline_row) {
+					$from_status = (string) ($timeline_row['from_status'] ?? '');
+					$to_status = (string) ($timeline_row['to_status'] ?? '');
+					$duration = isset($timeline_row['duration_since_prev_seconds']) ? (int) $timeline_row['duration_since_prev_seconds'] : 0;
+
+					echo '<tr>';
+					echo '<td>' . esc_html($this->formatGmtDate((string) ($timeline_row['at_gmt'] ?? ''))) . '</td>';
+					echo '<td>' . esc_html($this->formatUserLabel((int) ($timeline_row['actor_user_id'] ?? 0))) . '</td>';
+					echo '<td>' . esc_html($this->formatWorkflowValue('status', $from_status) . ' -> ' . $this->formatWorkflowValue('status', $to_status)) . '</td>';
+					echo '<td>' . esc_html($duration > 0 ? $this->formatDuration($duration) : __('Nevyplněno', 'ar-design-reporting')) . '</td>';
+					echo '</tr>';
+				}
+			}
+
+			echo '</tbody>';
+			echo '</table>';
+
 			echo '<h3 style="margin-top:16px;">' . esc_html__('Archivácie pre zadanú objednávku', 'ar-design-reporting') . '</h3>';
 
 			if (empty($order_archives)) {
@@ -404,7 +498,9 @@ final class DashboardPage
 			'cancelled_orders'     => __('Storná', 'ar-design-reporting'),
 			'net_revenue'          => __('Čistý obrat', 'ar-design-reporting'),
 			'average_order_value'  => __('Priemerná hodnota objednávky', 'ar-design-reporting'),
-			'avg_processing_hours' => __('Priemerný čas spracovania (h)', 'ar-design-reporting'),
+			'avg_processing_hours' => __('Priemerný celkový čas procesu (h)', 'ar-design-reporting'),
+			'avg_ready_for_packing_hours' => __('Priemer do stavu Na odoslanie (h)', 'ar-design-reporting'),
+			'avg_ready_for_packing_hours_manager' => __('Priemer do Na odoslanie (zvolený manažér) (h)', 'ar-design-reporting'),
 			'orders_per_employee'  => __('Objednávky na zamestnanca', 'ar-design-reporting'),
 			'kpi_orders'           => __('Objednávky započítané do KPI', 'ar-design-reporting'),
 			'completed'            => __('Dokončené objednávky', 'ar-design-reporting'),
@@ -423,7 +519,7 @@ final class DashboardPage
 			return number_format((float) $value, 2, ',', ' ');
 		}
 
-		if (in_array($key, array('avg_processing_hours', 'orders_per_employee'), true)) {
+		if (in_array($key, array('avg_processing_hours', 'orders_per_employee', 'avg_ready_for_packing_hours', 'avg_ready_for_packing_hours_manager'), true)) {
 			return number_format((float) $value, 2, ',', ' ');
 		}
 
@@ -502,10 +598,21 @@ final class DashboardPage
 		if ('status' === $key) {
 			$labels = array(
 				'new'          => __('Nová', 'ar-design-reporting'),
+				'pending'      => __('Čaká sa na platbu', 'ar-design-reporting'),
 				'processing'   => __('Ve zpracování', 'ar-design-reporting'),
+				'on-hold'      => __('Pozastavená', 'ar-design-reporting'),
 				'na-odoslanie' => __('Na odoslanie', 'ar-design-reporting'),
 				'zabalena'     => __('Zabalená', 'ar-design-reporting'),
 				'vybavena'     => __('Vybavená', 'ar-design-reporting'),
+				'failed'       => __('Neúspešná', 'ar-design-reporting'),
+				'cancelled'    => __('Zrušená', 'ar-design-reporting'),
+				'refunded'     => __('Refundovaná', 'ar-design-reporting'),
+				'caka-sa-na-platbu' => __('Čaká sa na platbu', 'ar-design-reporting'),
+				'spracovava-sa'     => __('Spracováva sa', 'ar-design-reporting'),
+				'pozastavena'       => __('Pozastavená', 'ar-design-reporting'),
+				'zrusena'           => __('Zrušená', 'ar-design-reporting'),
+				'refundovana'       => __('Refundovaná', 'ar-design-reporting'),
+				'neuspesna'         => __('Neúspešná', 'ar-design-reporting'),
 				'completed'    => __('Vybavená', 'ar-design-reporting'),
 			);
 

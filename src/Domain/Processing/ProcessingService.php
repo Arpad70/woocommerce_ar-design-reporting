@@ -10,6 +10,8 @@ use ArDesign\Reporting\Infrastructure\Repository\OrderProcessingRepository;
 
 final class ProcessingService
 {
+	private const MANAGER_META_KEY = '_ard_manager_user_id';
+
 	private OrderProcessingRepository $order_processing_repository;
 
 	private AuditLogger $audit_logger;
@@ -31,12 +33,13 @@ final class ProcessingService
 	{
 		$existing_record = $this->getRecord($order_id);
 		$classification = $this->order_classifier->classify($order_id);
-		$created_at     = current_time('mysql', true);
+		$created_at     = $this->resolveOrderCreatedAtGmt($order_id);
+		$assigned_manager_id = $this->resolveAssignedManagerUserId($order_id, $existing_record);
 
 		$this->order_processing_repository->replace(
 			array(
 				'order_id'          => $order_id,
-				'owner_user_id'     => isset($existing_record['owner_user_id']) ? (int) $existing_record['owner_user_id'] : null,
+				'owner_user_id'     => isset($existing_record['owner_user_id']) ? (int) $existing_record['owner_user_id'] : ($assigned_manager_id > 0 ? $assigned_manager_id : null),
 				'processing_mode'   => 'standard',
 				'classification'    => $classification['classification'],
 				'is_kpi_included'   => $classification['is_kpi_included'] ? 1 : 0,
@@ -90,6 +93,10 @@ final class ProcessingService
 
 		if (null !== $actor_user_id && $actor_user_id > 0) {
 			$update_data['owner_user_id'] = $actor_user_id;
+		}
+
+		if ('na-odoslanie' === $to_status) {
+			$update_data['started_at_gmt'] = current_time('mysql', true);
 		}
 
 		$this->order_processing_repository->updateByOrderId(
@@ -191,9 +198,9 @@ final class ProcessingService
 			return;
 		}
 
-		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
 		$finished_at = current_time('mysql', true);
-		$processing_seconds = $this->calculateProcessingSeconds($started_at, $finished_at);
+		$process_started_at = ! empty($record['created_at_gmt']) ? (string) $record['created_at_gmt'] : current_time('mysql', true);
+		$processing_seconds = $this->calculateProcessingSeconds($process_started_at, $finished_at);
 		$status = $this->updateWooOrderToFulfilledStatus($order_id, $actor_user_id);
 
 		if ('' === $status) {
@@ -416,5 +423,80 @@ final class ProcessingService
 	private function canTransitionToFailed(string $from_status): bool
 	{
 		return in_array($from_status, array('vybavena', 'completed'), true);
+	}
+
+	/**
+	 * @param array<string, mixed> $existing_record
+	 */
+	private function resolveAssignedManagerUserId(int $order_id, array $existing_record): int
+	{
+		if (! empty($existing_record['owner_user_id'])) {
+			return (int) $existing_record['owner_user_id'];
+		}
+
+		$current_meta_manager_id = $this->getOrderMetaManagerUserId($order_id);
+
+		if ($current_meta_manager_id > 0) {
+			return $current_meta_manager_id;
+		}
+
+		$default_manager_id = (int) get_option('ard_reporting_default_manager_user_id', 0);
+
+		if ($default_manager_id > 0) {
+			$this->setOrderMetaManagerUserId($order_id, $default_manager_id);
+		}
+
+		return $default_manager_id;
+	}
+
+	private function getOrderMetaManagerUserId(int $order_id): int
+	{
+		if ($order_id <= 0) {
+			return 0;
+		}
+
+		if (! function_exists('wc_get_order')) {
+			return 0;
+		}
+
+		$order = wc_get_order($order_id);
+		if (! $order instanceof \WC_Order) {
+			return 0;
+		}
+
+		return (int) $order->get_meta(self::MANAGER_META_KEY, true);
+	}
+
+	private function setOrderMetaManagerUserId(int $order_id, int $manager_user_id): void
+	{
+		if ($order_id <= 0 || $manager_user_id <= 0 || ! function_exists('wc_get_order')) {
+			return;
+		}
+
+		$order = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return;
+		}
+
+		$order->update_meta_data(self::MANAGER_META_KEY, $manager_user_id);
+		$order->save();
+	}
+
+	private function resolveOrderCreatedAtGmt(int $order_id): string
+	{
+		if ($order_id > 0 && function_exists('wc_get_order')) {
+			$order = wc_get_order($order_id);
+
+			if ($order instanceof \WC_Order) {
+				$date_created = $order->get_date_created();
+
+				if ($date_created instanceof \WC_DateTime) {
+					return gmdate('Y-m-d H:i:s', $date_created->getTimestamp());
+				}
+			}
+		}
+
+		return current_time('mysql', true);
 	}
 }

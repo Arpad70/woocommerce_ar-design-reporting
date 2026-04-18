@@ -206,6 +206,10 @@ final class Bootstrap
 				$message = __( 'Nastavenie e-mailového reportu bolo uložené.', 'ar-design-reporting' );
 			}
 
+			if ( 'manager_saved' === $action ) {
+				$message = __( 'Predvolený manažér pre zahájenie procesu balenia bol uložený.', 'ar-design-reporting' );
+			}
+
 			if ( 'email_save_failed' === $action ) {
 				$message = __( 'Nastavenie e-mailového reportu sa nepodarilo uložiť. Skontrolujte e-mailovú adresu.', 'ar-design-reporting' );
 			}

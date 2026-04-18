@@ -39,7 +39,25 @@ final class ExportManager
 		$class  = isset( $filters['classification'] ) ? sanitize_key( (string) $filters['classification'] ) : '';
 		$from   = isset( $filters['date_from'] ) ? sanitize_text_field( (string) $filters['date_from'] ) : '';
 		$to     = isset( $filters['date_to'] ) ? sanitize_text_field( (string) $filters['date_to'] ) : '';
-		$allowed_statuses = array( 'new', 'processing', 'na-odoslanie', 'zabalena', 'vybavena', 'completed' );
+		$allowed_statuses = array(
+			'new',
+			'pending',
+			'processing',
+			'on-hold',
+			'cancelled',
+			'refunded',
+			'failed',
+			'na-odoslanie',
+			'zabalena',
+			'vybavena',
+			'caka-sa-na-platbu',
+			'spracovava-sa',
+			'pozastavena',
+			'zrusena',
+			'refundovana',
+			'neuspesna',
+			'completed',
+		);
 		$allowed_classes  = array( 'standard', 'preorder', 'custom' );
 
 		if ( ! in_array( $status, $allowed_statuses, true ) ) {

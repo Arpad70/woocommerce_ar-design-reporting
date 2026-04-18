@@ -281,7 +281,7 @@ class OrderProcessingRepository
 
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 
-		$sql = "SELECT order_id, owner_user_id, classification, status, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, updated_at_gmt
+		$sql = "SELECT order_id, owner_user_id, classification, status, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, created_at_gmt, updated_at_gmt
 			FROM {$table}";
 
 		if (! empty($where_parts)) {

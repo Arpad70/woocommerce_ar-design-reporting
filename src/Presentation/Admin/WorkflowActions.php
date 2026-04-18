@@ -32,6 +32,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_take_over_order', array($this, 'handleTakeOver'));
 		add_action('admin_post_ard_finish_processing', array($this, 'handleFinishProcessing'));
 		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
+		add_action('admin_post_ard_save_default_manager', array($this, 'handleSaveDefaultManager'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
 		add_action('admin_post_ard_send_digest_now', array($this, 'handleSendDigestNow'));
@@ -80,6 +81,17 @@ final class WorkflowActions
 		}
 
 		$this->redirectBack('complete_fulfillment', $order_id, 0, $redirect_to);
+	}
+
+	public function handleSaveDefaultManager(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_save_default_manager');
+
+		$manager_user_id = isset($_POST['manager_user_id']) ? absint(wp_unslash($_POST['manager_user_id'])) : 0;
+		update_option('ard_reporting_default_manager_user_id', $manager_user_id > 0 ? $manager_user_id : 0);
+
+		$this->redirectBack('manager_saved');
 	}
 
 	public function handleExportCsv(): void

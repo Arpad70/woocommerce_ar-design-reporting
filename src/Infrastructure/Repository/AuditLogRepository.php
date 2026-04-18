@@ -85,6 +85,59 @@ class AuditLogRepository
 	}
 
 	/**
+	 * @param array<int, int> $order_ids
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getStatusChangeEventsByOrderIds(array $order_ids): array
+	{
+		global $wpdb;
+
+		$order_ids = array_values(array_filter(array_map('absint', $order_ids)));
+
+		if (empty($order_ids)) {
+			return array();
+		}
+
+		$table = $this->tables->auditLog();
+		$ids_sql = implode(',', $order_ids);
+		$rows = $wpdb->get_results(
+			"SELECT order_id, actor_user_id, old_value_json, new_value_json, created_at_gmt
+			FROM {$table}
+			WHERE event_type = 'order_status_changed' AND order_id IN ({$ids_sql})
+			ORDER BY order_id ASC, id ASC",
+			ARRAY_A
+		);
+
+		return is_array($rows) ? $rows : array();
+	}
+
+	/**
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getStatusTimelineByOrderId(int $order_id): array
+	{
+		global $wpdb;
+
+		if ($order_id <= 0) {
+			return array();
+		}
+
+		$table = $this->tables->auditLog();
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT actor_user_id, old_value_json, new_value_json, created_at_gmt
+				FROM {$table}
+				WHERE event_type = 'order_status_changed' AND order_id = %d
+				ORDER BY id ASC",
+				$order_id
+			),
+			ARRAY_A
+		);
+
+		return is_array($rows) ? $rows : array();
+	}
+
+	/**
 	 * @param array<int, string> $where_parts
 	 * @param array<int, string> $params
 	 * @param array<string, string> $filters
