@@ -43,11 +43,12 @@ final class OrderWorkflowPanel
 		$current_url   = $this->getCurrentUrl();
 		$status_label  = isset( $workflow['status'] ) ? (string) $workflow['status'] : __( 'new', 'ar-design-reporting' );
 		$owner_user_id = isset( $workflow['owner_user_id'] ) ? (int) $workflow['owner_user_id'] : 0;
+		$owner_label   = $this->resolveUserLabel( $owner_user_id );
 
 		echo '<div class="order_data_column" style="width:100%;margin-top:16px;">';
 		echo '<h3>' . esc_html__( 'AR Workflow', 'ar-design-reporting' ) . '</h3>';
 		echo '<p><strong>' . esc_html__( 'Stav', 'ar-design-reporting' ) . ':</strong> ' . esc_html( $status_label ) . '</p>';
-		echo '<p><strong>' . esc_html__( 'Zodpovedný používateľ', 'ar-design-reporting' ) . ':</strong> ' . esc_html( $owner_user_id > 0 ? (string) $owner_user_id : __( 'nezadaný', 'ar-design-reporting' ) ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Zodpovedný používateľ', 'ar-design-reporting' ) . ':</strong> ' . esc_html( $owner_label ) . '</p>';
 
 		echo '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
 
@@ -112,5 +113,26 @@ final class OrderWorkflowPanel
 		}
 
 		return admin_url( 'admin.php' );
+	}
+
+	private function resolveUserLabel( int $user_id ): string
+	{
+		if ( $user_id <= 0 ) {
+			return __( 'nezadaný', 'ar-design-reporting' );
+		}
+
+		if ( ! function_exists( 'get_user_by' ) ) {
+			return sprintf( __( 'Používateľ #%d', 'ar-design-reporting' ), $user_id );
+		}
+
+		$user = get_user_by( 'id', $user_id );
+
+		if ( ! $user instanceof \WP_User ) {
+			return sprintf( __( 'Používateľ #%d', 'ar-design-reporting' ), $user_id );
+		}
+
+		$name = '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login;
+
+		return $name . ' (#' . $user_id . ')';
 	}
 }
