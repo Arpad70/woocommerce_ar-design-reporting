@@ -163,6 +163,8 @@ final class ProcessingService
 			),
 			array('source' => 'manual_finish')
 		);
+
+		$this->updateWooOrderToOutgoingStatus($order_id, $actor_user_id);
 	}
 
 	/**
@@ -215,5 +217,63 @@ final class ProcessingService
 		} catch (\Exception $exception) {
 			return 0;
 		}
+	}
+
+	private function updateWooOrderToOutgoingStatus(int $order_id, int $actor_user_id): void
+	{
+		if (! function_exists('wc_get_order') || ! function_exists('wc_get_order_statuses')) {
+			return;
+		}
+
+		$order = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return;
+		}
+
+		$target_status = $this->resolveOutgoingStatusSlug();
+		$current_status = (string) $order->get_status();
+
+		if ('' === $target_status || $target_status === $current_status) {
+			return;
+		}
+
+		$order->update_status(
+			$target_status,
+			__('Stav bol automaticky nastavený po dokončení balenia v AR workflow.', 'ar-design-reporting'),
+			true
+		);
+
+		$this->audit_logger->log(
+			'order_status_set_to_outgoing',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array('woocommerce_status' => $current_status),
+			array('woocommerce_status' => $target_status),
+			array('source' => 'manual_finish')
+		);
+	}
+
+	private function resolveOutgoingStatusSlug(): string
+	{
+		$statuses = wc_get_order_statuses();
+
+		if (! is_array($statuses) || empty($statuses)) {
+			return '';
+		}
+
+		foreach ($statuses as $status_key => $label) {
+			$key   = (string) $status_key;
+			$title = trim(wp_strip_all_tags((string) $label));
+			$slug  = 0 === strpos($key, 'wc-') ? substr($key, 3) : $key;
+
+			if ('na-odoslanie' === $slug || 'Na odoslanie' === $title) {
+				return $slug;
+			}
+		}
+
+		return '';
 	}
 }
