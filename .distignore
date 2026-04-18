@@ -1,0 +1,12 @@
+.git
+.gitignore
+.DS_Store
+node_modules
+vendor/bin
+tests
+docs
+build
+.github
+*.zip
+phpcs.xml
+phpunit.xml

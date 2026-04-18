@@ -1,0 +1,219 @@
+<?php
+
+declare(strict_types=1);
+
+namespace ArDesign\Reporting\Domain\Processing;
+
+use ArDesign\Reporting\Domain\Audit\AuditLogger;
+use ArDesign\Reporting\Domain\Orders\OrderClassifier;
+use ArDesign\Reporting\Infrastructure\Repository\OrderProcessingRepository;
+
+final class ProcessingService
+{
+	private OrderProcessingRepository $order_processing_repository;
+
+	private AuditLogger $audit_logger;
+
+	private OrderClassifier $order_classifier;
+
+	public function __construct(
+		OrderProcessingRepository $order_processing_repository,
+		AuditLogger $audit_logger,
+		OrderClassifier $order_classifier
+	)
+	{
+		$this->order_processing_repository = $order_processing_repository;
+		$this->audit_logger     = $audit_logger;
+		$this->order_classifier = $order_classifier;
+	}
+
+	public function initializeOrder(int $order_id): void
+	{
+		$existing_record = $this->getRecord($order_id);
+		$classification = $this->order_classifier->classify($order_id);
+		$created_at     = current_time('mysql', true);
+
+		$this->order_processing_repository->replace(
+			array(
+				'order_id'          => $order_id,
+				'owner_user_id'     => isset($existing_record['owner_user_id']) ? (int) $existing_record['owner_user_id'] : null,
+				'processing_mode'   => 'standard',
+				'classification'    => $classification['classification'],
+				'is_kpi_included'   => $classification['is_kpi_included'] ? 1 : 0,
+				'status'            => isset($existing_record['status']) ? (string) $existing_record['status'] : 'new',
+				'source_trigger'    => 'woocommerce_new_order',
+				'started_at_gmt'    => $existing_record['started_at_gmt'] ?? null,
+				'finished_at_gmt'   => $existing_record['finished_at_gmt'] ?? null,
+				'processing_seconds'=> isset($existing_record['processing_seconds']) ? (int) $existing_record['processing_seconds'] : null,
+				'created_at_gmt'    => isset($existing_record['created_at_gmt']) ? (string) $existing_record['created_at_gmt'] : $created_at,
+				'updated_at_gmt'    => $created_at,
+			)
+		);
+	}
+
+	public function handleStatusChange(int $order_id, string $from_status, string $to_status): void
+	{
+		if ($order_id <= 0) {
+			return;
+		}
+
+		$record = $this->ensureRecord($order_id);
+
+		if (empty($record)) {
+			return;
+		}
+
+		$from_status = sanitize_key($from_status);
+		$to_status   = sanitize_key($to_status);
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'status'         => $to_status,
+				'source_trigger' => 'woocommerce_order_status_changed',
+				'updated_at_gmt' => current_time('mysql', true),
+			)
+		);
+
+		$this->audit_logger->log(
+			'order_status_changed',
+			'order',
+			$order_id,
+			$order_id,
+			get_current_user_id() ?: null,
+			array('status' => $from_status),
+			array('status' => $to_status),
+			array('source' => 'woocommerce_order_status_changed')
+		);
+	}
+
+	public function takeOverOrder(int $order_id, int $actor_user_id): void
+	{
+		$record     = $this->ensureRecord($order_id);
+		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'owner_user_id'  => $actor_user_id,
+				'started_at_gmt' => $started_at,
+				'status'         => 'processing',
+				'source_trigger' => 'manual_take_over',
+				'updated_at_gmt' => current_time('mysql', true),
+			)
+		);
+
+		$this->audit_logger->log(
+			'order_taken_over',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array(
+				'owner_user_id'  => isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : null,
+				'started_at_gmt' => $record['started_at_gmt'] ?? null,
+			),
+			array(
+				'owner_user_id'  => $actor_user_id,
+				'started_at_gmt' => $started_at,
+				'status'         => 'processing',
+			),
+			array('source' => 'manual_take_over')
+		);
+	}
+
+	public function finishProcessing(int $order_id, int $actor_user_id): void
+	{
+		$record = $this->ensureRecord($order_id);
+		if (empty($record)) {
+			return;
+		}
+
+		$started_at = ! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : current_time('mysql', true);
+		$finished_at = current_time('mysql', true);
+		$processing_seconds = $this->calculateProcessingSeconds($started_at, $finished_at);
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'finished_at_gmt'    => $finished_at,
+				'processing_seconds' => $processing_seconds,
+				'status'             => 'packed',
+				'source_trigger'     => 'manual_finish',
+				'updated_at_gmt'     => $finished_at,
+			)
+		);
+
+		$this->audit_logger->log(
+			'order_processing_finished',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array(
+				'finished_at_gmt'    => $record['finished_at_gmt'] ?? null,
+				'processing_seconds' => isset($record['processing_seconds']) ? (int) $record['processing_seconds'] : null,
+				'status'             => $record['status'] ?? null,
+			),
+			array(
+				'started_at_gmt'     => $started_at,
+				'finished_at_gmt'    => $finished_at,
+				'processing_seconds' => $processing_seconds,
+				'status'             => 'packed',
+			),
+			array('source' => 'manual_finish')
+		);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function getWorkflowSummary(int $order_id): array
+	{
+		$record = $this->getRecord($order_id);
+
+		if (empty($record)) {
+			return array();
+		}
+
+		return $record;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function ensureRecord(int $order_id): array
+	{
+		$record = $this->getRecord($order_id);
+
+		if (! empty($record)) {
+			return $record;
+		}
+
+		$this->initializeOrder($order_id);
+
+		return $this->getRecord($order_id);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function getRecord(int $order_id): array
+	{
+		return $this->order_processing_repository->findByOrderId($order_id);
+	}
+
+	private function calculateProcessingSeconds(string $started_at_gmt, string $finished_at_gmt): int
+	{
+		try {
+			$timezone  = new \DateTimeZone('UTC');
+			$started_at = new \DateTimeImmutable($started_at_gmt, $timezone);
+			$finished_at = new \DateTimeImmutable($finished_at_gmt, $timezone);
+			$seconds = $finished_at->getTimestamp() - $started_at->getTimestamp();
+
+			return max(0, $seconds);
+		} catch (\Exception $exception) {
+			return 0;
+		}
+	}
+}

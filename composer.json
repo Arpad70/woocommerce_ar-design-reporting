@@ -1,0 +1,25 @@
+{
+  "name": "ar-design/ar-design-reporting",
+  "description": "HPOS-first WooCommerce admin reporting plugin for ar-design.sk",
+  "type": "wordpress-plugin",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "ArDesign\\Reporting\\": "src/"
+    }
+  },
+  "scripts": {
+    "build": [
+      "bash scripts/build-plugin.sh"
+    ],
+    "test:integration": [
+      "php tests/run-integration-tests.php"
+    ]
+  },
+  "config": {
+    "sort-packages": true
+  }
+}
