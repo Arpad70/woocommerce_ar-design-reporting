@@ -38,8 +38,8 @@ function run_workflow_integration_test(): void
 
 	$row = $rows[0];
 
-	if ('na-odoslanie' !== ($row['status'] ?? null)) {
-		throw new RuntimeException('Workflow test failed: expected final status "na-odoslanie".');
+	if ('odoslana' !== ($row['status'] ?? null)) {
+		throw new RuntimeException('Workflow test failed: expected final status "odoslana".');
 	}
 
 	if ((int) ($row['owner_user_id'] ?? 0) !== 42) {

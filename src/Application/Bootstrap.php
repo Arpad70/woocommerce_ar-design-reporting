@@ -189,7 +189,7 @@ final class Bootstrap
 			if ( 'finish_processing' === $action ) {
 				$message = sprintf(
 					/* translators: %d: order ID */
-					__( 'Objednávka #%d byla označena jako pripravená na odoslanie.', 'ar-design-reporting' ),
+					__( 'Objednávka #%d byla označena jako odoslaná.', 'ar-design-reporting' ),
 					$order_id
 				);
 			}

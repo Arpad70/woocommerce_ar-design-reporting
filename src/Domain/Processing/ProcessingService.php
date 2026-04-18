@@ -145,7 +145,7 @@ final class ProcessingService
 			array(
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'na-odoslanie',
+				'status'             => 'odoslana',
 				'source_trigger'     => 'manual_finish',
 				'updated_at_gmt'     => $finished_at,
 			)
@@ -166,12 +166,12 @@ final class ProcessingService
 				'started_at_gmt'     => $started_at,
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'na-odoslanie',
+				'status'             => 'odoslana',
 			),
 			array('source' => 'manual_finish')
 		);
 
-		$this->updateWooOrderToOutgoingStatus($order_id, $actor_user_id);
+		$this->updateWooOrderToShippedStatus($order_id, $actor_user_id);
 	}
 
 	/**
@@ -226,7 +226,7 @@ final class ProcessingService
 		}
 	}
 
-	private function updateWooOrderToOutgoingStatus(int $order_id, int $actor_user_id): void
+	private function updateWooOrderToShippedStatus(int $order_id, int $actor_user_id): void
 	{
 		if (! function_exists('wc_get_order') || ! function_exists('wc_get_order_statuses')) {
 			return;
@@ -238,7 +238,7 @@ final class ProcessingService
 			return;
 		}
 
-		$target_status = $this->resolveOutgoingStatusSlug();
+		$target_status = $this->resolveShippedStatusSlug();
 		$current_status = (string) $order->get_status();
 
 		if ('' === $target_status || $target_status === $current_status) {
@@ -247,12 +247,12 @@ final class ProcessingService
 
 		$order->update_status(
 			$target_status,
-			__('Stav bol automaticky nastavený po dokončení balenia v AR workflow.', 'ar-design-reporting'),
+			__('Stav bol automaticky nastavený na Odoslaná po dokončení balenia v AR workflow.', 'ar-design-reporting'),
 			true
 		);
 
 		$this->audit_logger->log(
-			'order_status_set_to_outgoing',
+			'order_status_set_to_shipped',
 			'order',
 			$order_id,
 			$order_id,
@@ -263,7 +263,7 @@ final class ProcessingService
 		);
 	}
 
-	private function resolveOutgoingStatusSlug(): string
+	private function resolveShippedStatusSlug(): string
 	{
 		$statuses = wc_get_order_statuses();
 
@@ -276,9 +276,13 @@ final class ProcessingService
 			$title = trim(wp_strip_all_tags((string) $label));
 			$slug  = 0 === strpos($key, 'wc-') ? substr($key, 3) : $key;
 
-			if ('na-odoslanie' === $slug || 'Na odoslanie' === $title) {
+			if ('odoslana' === $slug || 'Odoslaná' === $title || 'Odoslana' === $title) {
 				return $slug;
 			}
+		}
+
+		if (isset($statuses['wc-completed'])) {
+			return 'completed';
 		}
 
 		return '';
