@@ -215,13 +215,13 @@ final class DashboardPage
 		echo '</tbody>';
 		echo '</table>';
 
-		echo '<h2 style="margin-top:24px;">' . esc_html__('Výkon manažéra (prechod do Na odoslanie)', 'ar-design-reporting') . '</h2>';
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Výkon manažéra (zahájenie workflow)', 'ar-design-reporting') . '</h2>';
 		echo '<table class="widefat striped" style="max-width:960px;">';
-		echo '<thead><tr><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Počet objednávok', 'ar-design-reporting') . '</th><th>' . esc_html__('Priemer do Na odoslanie', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<thead><tr><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Počet objednávok', 'ar-design-reporting') . '</th><th>' . esc_html__('Priemer na zahájenie workflow', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
 		if (empty($manager_overview)) {
-			echo '<tr><td colspan="3">' . esc_html__('Žiadne dáta pre KPI prechodu do Na odoslanie v zvolenom období.', 'ar-design-reporting') . '</td></tr>';
+			echo '<tr><td colspan="3">' . esc_html__('Žiadne dáta pre KPI zahájenia workflow v zvolenom období.', 'ar-design-reporting') . '</td></tr>';
 		} else {
 			foreach ($manager_overview as $manager_row) {
 				$manager_id = (int) ($manager_row['manager_user_id'] ?? 0);
@@ -550,8 +550,8 @@ final class DashboardPage
 			'net_revenue'          => __('Čistý obrat', 'ar-design-reporting'),
 			'average_order_value'  => __('Priemerná hodnota objednávky', 'ar-design-reporting'),
 			'avg_processing_hours' => __('Priemerný celkový čas procesu (h)', 'ar-design-reporting'),
-			'avg_ready_for_packing_hours' => __('Priemer do stavu Na odoslanie (h)', 'ar-design-reporting'),
-			'avg_ready_for_packing_hours_manager' => __('Priemer do Na odoslanie (zvolený manažér) (h)', 'ar-design-reporting'),
+			'avg_ready_for_packing_hours' => __('Priemer na zahájenie workflow (h)', 'ar-design-reporting'),
+			'avg_ready_for_packing_hours_manager' => __('Priemer na zahájenie workflow (zvolený manažér) (h)', 'ar-design-reporting'),
 			'orders_per_employee'  => __('Objednávky na zamestnanca', 'ar-design-reporting'),
 			'kpi_orders'           => __('Objednávky započítané do KPI', 'ar-design-reporting'),
 			'completed'            => __('Dokončené objednávky', 'ar-design-reporting'),
