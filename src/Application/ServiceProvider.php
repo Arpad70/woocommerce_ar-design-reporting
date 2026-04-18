@@ -27,6 +27,7 @@ use ArDesign\Reporting\Presentation\Admin\OrderWorkflowPanel;
 use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
+use ArDesign\Reporting\Support\Hooks\OrderProtectionHooks;
 use ArDesign\Reporting\Support\Updates\GitHubUpdater;
 use ArDesign\Reporting\Support\Updates\RollbackManager;
 
@@ -73,7 +74,9 @@ final class ServiceProvider
 				$c->get( KpiCalculator::class ),
 				$c->get( Tables::class ),
 				$c->get( Migrator::class ),
-				$c->get( Compatibility::class )
+				$c->get( Compatibility::class ),
+				$c->get( OrderProcessingRepository::class ),
+				$c->get( AuditLogRepository::class )
 			)
 		);
 		$container->set( ExportManager::class, static fn ( Container $c ): ExportManager => new ExportManager( $c->get( OrderProcessingRepository::class ) ) );
@@ -141,6 +144,10 @@ final class ServiceProvider
 		$container->set(
 			OrderArchiveHooks::class,
 			static fn ( Container $c ): OrderArchiveHooks => new OrderArchiveHooks( $c->get( OrderArchiveService::class ) )
+		);
+		$container->set(
+			OrderProtectionHooks::class,
+			static fn ( Container $c ): OrderProtectionHooks => new OrderProtectionHooks( $c->get( AuditLogger::class ) )
 		);
 	}
 }

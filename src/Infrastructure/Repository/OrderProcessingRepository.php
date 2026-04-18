@@ -145,18 +145,175 @@ class OrderProcessingRepository
 	}
 
 	/**
+	 * @param array<string, string> $filters
 	 * @return array<string, int>
 	 */
-	public function getOverviewCounters(): array
+	public function getOverviewCounters(array $filters = array()): array
 	{
 		global $wpdb;
 
 		$table = $this->tables->orderProcessing();
+		$where_parts = array();
+		$params = array();
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+		$where_sql = ! empty($where_parts) ? ' WHERE ' . implode(' AND ', $where_parts) : '';
+
+		$totals_sql = "SELECT COUNT(*) FROM {$table}{$where_sql}";
+		$kpi_sql    = "SELECT COUNT(*) FROM {$table}{$where_sql}" . (! empty($where_parts) ? ' AND' : ' WHERE') . " is_kpi_included = 1";
+		$done_sql   = "SELECT COUNT(*) FROM {$table}{$where_sql}" . (! empty($where_parts) ? ' AND' : ' WHERE') . " status IN ('na-odoslanie', 'odoslana', 'packed', 'completed')";
+
+		if (! empty($params)) {
+			$totals_sql = $wpdb->prepare($totals_sql, $params);
+			$kpi_sql    = $wpdb->prepare($kpi_sql, $params);
+			$done_sql   = $wpdb->prepare($done_sql, $params);
+		}
 
 		return array(
-			'total_orders' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}"),
-			'kpi_orders'   => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE is_kpi_included = 1"),
-			'completed'    => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE status IN ('packed', 'completed')"),
+			'total_orders' => (int) $wpdb->get_var($totals_sql),
+			'kpi_orders'   => (int) $wpdb->get_var($kpi_sql),
+			'completed'    => (int) $wpdb->get_var($done_sql),
 		);
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 */
+	public function getAverageProcessingSeconds(array $filters = array()): float
+	{
+		global $wpdb;
+
+		$table = $this->tables->orderProcessing();
+		$where_parts = array(
+			'processing_seconds IS NOT NULL',
+			"status IN ('na-odoslanie', 'odoslana', 'packed', 'completed')",
+		);
+		$params = array();
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+		$sql = "SELECT AVG(processing_seconds) FROM {$table} WHERE " . implode(' AND ', $where_parts);
+
+		if (! empty($params)) {
+			$sql = $wpdb->prepare($sql, $params);
+		}
+
+		return (float) $wpdb->get_var($sql);
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 */
+	public function getAverageOrdersPerEmployee(array $filters = array()): float
+	{
+		global $wpdb;
+
+		$table = $this->tables->orderProcessing();
+		$where_parts = array(
+			'owner_user_id IS NOT NULL',
+			'owner_user_id > 0',
+		);
+		$params = array();
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+
+		$subquery = "SELECT owner_user_id, COUNT(*) AS order_count FROM {$table} WHERE " . implode(' AND ', $where_parts) . ' GROUP BY owner_user_id';
+		$sql = "SELECT AVG(order_count) FROM ({$subquery}) employee_counts";
+
+		if (! empty($params)) {
+			$sql = $wpdb->prepare($sql, $params);
+		}
+
+		return (float) $wpdb->get_var($sql);
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getEmployeePerformanceRows(array $filters = array(), int $limit = 50): array
+	{
+		global $wpdb;
+
+		$table = $this->tables->orderProcessing();
+		$limit = max(1, min(200, $limit));
+		$where_parts = array(
+			'owner_user_id IS NOT NULL',
+			'owner_user_id > 0',
+		);
+		$params = array();
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+
+		$sql = "SELECT owner_user_id, COUNT(*) AS orders_count, AVG(processing_seconds) AS avg_processing_seconds
+			FROM {$table}
+			WHERE " . implode(' AND ', $where_parts) . '
+			GROUP BY owner_user_id
+			ORDER BY orders_count DESC
+			LIMIT ' . $limit;
+
+		if (! empty($params)) {
+			$sql = $wpdb->prepare($sql, $params);
+		}
+
+		$rows = $wpdb->get_results($sql, ARRAY_A);
+
+		return is_array($rows) ? $rows : array();
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getOrderRowsForDashboard(array $filters = array(), int $limit = 200): array
+	{
+		global $wpdb;
+
+		$table = $this->tables->orderProcessing();
+		$limit = max(1, min(500, $limit));
+		$where_parts = array();
+		$params = array();
+
+		if ('' !== ($filters['status'] ?? '')) {
+			$where_parts[] = 'status = %s';
+			$params[] = $filters['status'];
+		}
+
+		if ('' !== ($filters['classification'] ?? '')) {
+			$where_parts[] = 'classification = %s';
+			$params[] = $filters['classification'];
+		}
+
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+
+		$sql = "SELECT order_id, owner_user_id, classification, status, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, updated_at_gmt
+			FROM {$table}";
+
+		if (! empty($where_parts)) {
+			$sql .= ' WHERE ' . implode(' AND ', $where_parts);
+		}
+
+		$sql .= ' ORDER BY updated_at_gmt DESC LIMIT ' . $limit;
+
+		if (! empty($params)) {
+			$sql = $wpdb->prepare($sql, $params);
+		}
+
+		$rows = $wpdb->get_results($sql, ARRAY_A);
+
+		return is_array($rows) ? $rows : array();
+	}
+
+	/**
+	 * @param array<int, string> $where_parts
+	 * @param array<int, string> $params
+	 * @param array<string, string> $filters
+	 */
+	private function appendDateRangeFilter(array &$where_parts, array &$params, array $filters): void
+	{
+		if ('' !== ($filters['date_from'] ?? '')) {
+			$where_parts[] = 'DATE(created_at_gmt) >= %s';
+			$params[] = (string) $filters['date_from'];
+		}
+
+		if ('' !== ($filters['date_to'] ?? '')) {
+			$where_parts[] = 'DATE(created_at_gmt) <= %s';
+			$params[] = (string) $filters['date_to'];
+		}
 	}
 }

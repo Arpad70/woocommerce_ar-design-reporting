@@ -38,8 +38,8 @@ function run_workflow_integration_test(): void
 
 	$row = $rows[0];
 
-	if ('packed' !== ($row['status'] ?? null)) {
-		throw new RuntimeException('Workflow test failed: expected final status "packed".');
+	if ('na-odoslanie' !== ($row['status'] ?? null)) {
+		throw new RuntimeException('Workflow test failed: expected final status "na-odoslanie".');
 	}
 
 	if ((int) ($row['owner_user_id'] ?? 0) !== 42) {
@@ -50,4 +50,3 @@ function run_workflow_integration_test(): void
 		throw new RuntimeException('Workflow test failed: expected both started_at_gmt and finished_at_gmt.');
 	}
 }
-

@@ -65,14 +65,21 @@ final class ProcessingService
 
 		$from_status = sanitize_key($from_status);
 		$to_status   = sanitize_key($to_status);
+		$actor_user_id = get_current_user_id() ?: null;
+
+		$update_data = array(
+			'status'         => $to_status,
+			'source_trigger' => 'woocommerce_order_status_changed',
+			'updated_at_gmt' => current_time('mysql', true),
+		);
+
+		if (null !== $actor_user_id && $actor_user_id > 0) {
+			$update_data['owner_user_id'] = $actor_user_id;
+		}
 
 		$this->order_processing_repository->updateByOrderId(
 			$order_id,
-			array(
-				'status'         => $to_status,
-				'source_trigger' => 'woocommerce_order_status_changed',
-				'updated_at_gmt' => current_time('mysql', true),
-			)
+			$update_data
 		);
 
 		$this->audit_logger->log(
@@ -80,7 +87,7 @@ final class ProcessingService
 			'order',
 			$order_id,
 			$order_id,
-			get_current_user_id() ?: null,
+			$actor_user_id,
 			array('status' => $from_status),
 			array('status' => $to_status),
 			array('source' => 'woocommerce_order_status_changed')
@@ -138,7 +145,7 @@ final class ProcessingService
 			array(
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'packed',
+				'status'             => 'na-odoslanie',
 				'source_trigger'     => 'manual_finish',
 				'updated_at_gmt'     => $finished_at,
 			)
@@ -159,7 +166,7 @@ final class ProcessingService
 				'started_at_gmt'     => $started_at,
 				'finished_at_gmt'    => $finished_at,
 				'processing_seconds' => $processing_seconds,
-				'status'             => 'packed',
+				'status'             => 'na-odoslanie',
 			),
 			array('source' => 'manual_finish')
 		);

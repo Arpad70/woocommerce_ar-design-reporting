@@ -12,6 +12,7 @@ use ArDesign\Reporting\Presentation\Admin\OrderWorkflowPanel;
 use ArDesign\Reporting\Presentation\Admin\WorkflowActions;
 use ArDesign\Reporting\Support\Hooks\OrderArchiveHooks;
 use ArDesign\Reporting\Support\Hooks\OrderHooks;
+use ArDesign\Reporting\Support\Hooks\OrderProtectionHooks;
 use ArDesign\Reporting\Support\Updates\GitHubUpdater;
 use ArDesign\Reporting\Support\Updates\RollbackManager;
 
@@ -74,6 +75,7 @@ final class Bootstrap
 	{
 		$this->container->get( OrderHooks::class )->register();
 		$this->container->get( OrderArchiveHooks::class )->register();
+		$this->container->get( OrderProtectionHooks::class )->register();
 	}
 
 	public function registerAdminActions(): void
@@ -187,7 +189,7 @@ final class Bootstrap
 			if ( 'finish_processing' === $action ) {
 				$message = sprintf(
 					/* translators: %d: order ID */
-					__( 'Objednávka #%d byla označena jako zabalená.', 'ar-design-reporting' ),
+					__( 'Objednávka #%d byla označena jako pripravená na odoslanie.', 'ar-design-reporting' ),
 					$order_id
 				);
 			}
