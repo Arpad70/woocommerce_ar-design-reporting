@@ -84,7 +84,6 @@ final class DashboardPage
 		$manager_candidates = function_exists('get_users') ? get_users(
 			array(
 				'role__in' => array('administrator', 'shop_manager'),
-				'fields'   => array('ID', 'display_name', 'user_login'),
 				'orderby'  => 'display_name',
 				'order'    => 'ASC',
 			)
