@@ -178,6 +178,47 @@ final class Bootstrap
 			$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
 			$message  = '';
 
+			if ( 'owner_mismatch' === $action ) {
+				$expected_owner   = isset( $_GET['expected_owner'] ) ? absint( wp_unslash( $_GET['expected_owner'] ) ) : 0;
+				$requested_action = isset( $_GET['requested_action'] ) ? sanitize_key( wp_unslash( $_GET['requested_action'] ) ) : '';
+				$current_user_id  = get_current_user_id();
+				$redirect_to      = $this->getCurrentAdminUrl();
+
+				echo '<div class="notice notice-warning"><p>';
+				echo esc_html(
+					sprintf(
+						/* translators: 1: order ID, 2: expected owner label, 3: current user label */
+						__( 'Objednávka #%1$d je aktuálne priradená používateľovi %2$s. Prihlásený používateľ je %3$s.', 'ar-design-reporting' ),
+						$order_id,
+						$this->formatUserLabel( $expected_owner ),
+						$this->formatUserLabel( $current_user_id )
+					)
+				);
+				echo '</p><p>';
+				echo esc_html( __( 'Ak chcete pokračovať, najprv potvrďte zmenu priradenia objednávky na prihláseného používateľa.', 'ar-design-reporting' ) );
+				echo '</p>';
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px;">';
+				wp_nonce_field( 'ard_reassign_and_run' );
+				echo '<input type="hidden" name="action" value="ard_reassign_and_run" />';
+				echo '<input type="hidden" name="order_id" value="' . esc_attr( (string) $order_id ) . '" />';
+				echo '<input type="hidden" name="requested_action" value="' . esc_attr( $requested_action ) . '" />';
+				echo '<input type="hidden" name="redirect_to" value="' . esc_attr( $redirect_to ) . '" />';
+				submit_button(
+					sprintf(
+						/* translators: %s: action label */
+						__( 'Zmeniť priradenie a pokračovať (%s)', 'ar-design-reporting' ),
+						$this->formatRequestedActionLabel( $requested_action )
+					),
+					'primary',
+					'submit',
+					false
+				);
+				echo '</form>';
+				echo '</div>';
+
+				return;
+			}
+
 			if ( 'take_over' === $action ) {
 				$message = sprintf(
 					/* translators: %d: order ID */
@@ -210,6 +251,19 @@ final class Bootstrap
 				$message = __( 'Predvolený manažér pre zahájenie procesu balenia bol uložený.', 'ar-design-reporting' );
 			}
 
+			if ( 'reassigned_and_completed' === $action ) {
+				$requested_action = isset( $_GET['requested_action'] ) ? sanitize_key( wp_unslash( $_GET['requested_action'] ) ) : '';
+				$message = sprintf(
+					/* translators: %s: action label */
+					__( 'Priradenie objednávky bolo zmenené a akcia %s bola úspešne vykonaná.', 'ar-design-reporting' ),
+					$this->formatRequestedActionLabel( $requested_action )
+				);
+			}
+
+			if ( 'owner_mismatch_invalid' === $action ) {
+				$message = __( 'Zmena priradenia sa nepodarila vykonať. Skontrolujte objednávku a skúste to znovu.', 'ar-design-reporting' );
+			}
+
 			if ( 'email_save_failed' === $action ) {
 				$message = __( 'Nastavenie e-mailového reportu sa nepodarilo uložiť. Skontrolujte e-mailovú adresu.', 'ar-design-reporting' );
 			}
@@ -227,6 +281,54 @@ final class Bootstrap
 				echo '<div class="notice notice-success"><p>' . esc_html( $message ) . '</p></div>';
 			}
 		}
+	}
+
+	private function formatRequestedActionLabel( string $requested_action ): string
+	{
+		$labels = array(
+			'take_over'          => __( 'Prevziať objednávku', 'ar-design-reporting' ),
+			'finish_processing'  => __( 'Označiť ako Zabalená', 'ar-design-reporting' ),
+			'complete_fulfillment' => __( 'Označiť ako Vybavená', 'ar-design-reporting' ),
+		);
+
+		return $labels[ $requested_action ] ?? $requested_action;
+	}
+
+	private function formatUserLabel( int $user_id ): string
+	{
+		if ( $user_id <= 0 ) {
+			return __( 'Nepriradený', 'ar-design-reporting' );
+		}
+
+		if ( ! function_exists( 'get_user_by' ) ) {
+			return '#' . $user_id;
+		}
+
+		$user = get_user_by( 'id', $user_id );
+
+		if ( ! $user instanceof \WP_User ) {
+			return '#' . $user_id;
+		}
+
+		$name = '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login;
+
+		return $name . ' (#' . $user_id . ')';
+	}
+
+	private function getCurrentAdminUrl(): string
+	{
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) || ! is_string( $_SERVER['REQUEST_URI'] ) ) {
+			return admin_url( 'admin.php' );
+		}
+
+		$request_uri = wp_unslash( $_SERVER['REQUEST_URI'] );
+		$request_uri = '/' . ltrim( $request_uri, '/' );
+
+		if ( false !== strpos( $request_uri, '/wp-admin/' ) ) {
+			return home_url( $request_uri );
+		}
+
+		return admin_url( 'admin.php' );
 	}
 
 	public function renderDashboardPage(): void

@@ -152,6 +152,38 @@ final class ProcessingService
 		);
 	}
 
+	public function assignOrderOwner(int $order_id, int $actor_user_id): void
+	{
+		if ($order_id <= 0 || $actor_user_id <= 0) {
+			return;
+		}
+
+		$record = $this->ensureRecord($order_id);
+		$old_owner = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'owner_user_id'  => $actor_user_id,
+				'updated_at_gmt' => current_time('mysql', true),
+				'source_trigger' => 'manual_reassign',
+			)
+		);
+
+		$this->setOrderMetaManagerUserId($order_id, $actor_user_id);
+
+		$this->audit_logger->log(
+			'order_owner_reassigned',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array('owner_user_id' => $old_owner > 0 ? $old_owner : null),
+			array('owner_user_id' => $actor_user_id),
+			array('source' => 'manual_reassign')
+		);
+	}
+
 	public function finishProcessing(int $order_id, int $actor_user_id): void
 	{
 		$record = $this->ensureRecord($order_id);

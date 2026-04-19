@@ -32,6 +32,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_take_over_order', array($this, 'handleTakeOver'));
 		add_action('admin_post_ard_finish_processing', array($this, 'handleFinishProcessing'));
 		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
+		add_action('admin_post_ard_reassign_and_run', array($this, 'handleReassignAndRun'));
 		add_action('admin_post_ard_save_default_manager', array($this, 'handleSaveDefaultManager'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
@@ -45,9 +46,14 @@ final class WorkflowActions
 
 		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
 		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if (! $this->ensureOrderOwnershipOrPrompt($order_id, $actor_user_id, 'take_over', $redirect_to)) {
+			return;
+		}
 
 		if ($order_id > 0) {
-			$this->processing_service->takeOverOrder($order_id, get_current_user_id());
+			$this->processing_service->takeOverOrder($order_id, $actor_user_id);
 		}
 
 		$this->redirectBack('take_over', $order_id, 0, $redirect_to);
@@ -60,9 +66,14 @@ final class WorkflowActions
 
 		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
 		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if (! $this->ensureOrderOwnershipOrPrompt($order_id, $actor_user_id, 'finish_processing', $redirect_to)) {
+			return;
+		}
 
 		if ($order_id > 0) {
-			$this->processing_service->finishProcessing($order_id, get_current_user_id());
+			$this->processing_service->finishProcessing($order_id, $actor_user_id);
 		}
 
 		$this->redirectBack('finish_processing', $order_id, 0, $redirect_to);
@@ -75,9 +86,14 @@ final class WorkflowActions
 
 		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
 		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if (! $this->ensureOrderOwnershipOrPrompt($order_id, $actor_user_id, 'complete_fulfillment', $redirect_to)) {
+			return;
+		}
 
 		if ($order_id > 0) {
-			$this->processing_service->completeFulfillment($order_id, get_current_user_id());
+			$this->processing_service->completeFulfillment($order_id, $actor_user_id);
 		}
 
 		$this->redirectBack('complete_fulfillment', $order_id, 0, $redirect_to);
@@ -92,6 +108,45 @@ final class WorkflowActions
 		update_option('ard_reporting_default_manager_user_id', $manager_user_id > 0 ? $manager_user_id : 0);
 
 		$this->redirectBack('manager_saved');
+	}
+
+	public function handleReassignAndRun(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_reassign_and_run');
+
+		$order_id    = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$requested_action = isset($_POST['requested_action']) ? sanitize_key(wp_unslash($_POST['requested_action'])) : '';
+		$redirect_to = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if ($order_id <= 0 || $actor_user_id <= 0) {
+			$this->redirectBack('owner_mismatch_invalid', $order_id, 0, $redirect_to);
+		}
+
+		$this->processing_service->assignOrderOwner($order_id, $actor_user_id);
+
+		if ('take_over' === $requested_action) {
+			$this->processing_service->takeOverOrder($order_id, $actor_user_id);
+		}
+
+		if ('finish_processing' === $requested_action) {
+			$this->processing_service->finishProcessing($order_id, $actor_user_id);
+		}
+
+		if ('complete_fulfillment' === $requested_action) {
+			$this->processing_service->completeFulfillment($order_id, $actor_user_id);
+		}
+
+		$this->redirectBack(
+			'reassigned_and_completed',
+			$order_id,
+			0,
+			$redirect_to,
+			array(
+				'requested_action' => $requested_action,
+			)
+		);
 	}
 
 	public function handleExportCsv(): void
@@ -136,7 +191,7 @@ final class WorkflowActions
 		}
 	}
 
-	private function redirectBack(string $action, int $order_id = 0, int $sent = 0, string $redirect_to = ''): void
+	private function redirectBack(string $action, int $order_id = 0, int $sent = 0, string $redirect_to = '', array $extra_args = array()): void
 	{
 		$args = array('ard_admin' => $action);
 
@@ -148,12 +203,49 @@ final class WorkflowActions
 			$args['sent'] = $sent;
 		}
 
+		if (! empty($extra_args)) {
+			foreach ($extra_args as $arg_key => $arg_value) {
+				if (! is_string($arg_key)) {
+					continue;
+				}
+
+				$args[$arg_key] = is_scalar($arg_value) ? (string) $arg_value : '';
+			}
+		}
+
 		$base_url = $this->resolveAdminRedirect($redirect_to, $order_id);
 
 		$url = add_query_arg($args, $base_url);
 
 		wp_safe_redirect($url);
 		exit;
+	}
+
+	private function ensureOrderOwnershipOrPrompt(int $order_id, int $actor_user_id, string $requested_action, string $redirect_to): bool
+	{
+		if ($order_id <= 0 || $actor_user_id <= 0) {
+			return true;
+		}
+
+		$workflow = $this->processing_service->getWorkflowSummary($order_id);
+		$owner_user_id = isset($workflow['owner_user_id']) ? (int) $workflow['owner_user_id'] : 0;
+
+		if ($owner_user_id <= 0 || $owner_user_id === $actor_user_id) {
+			return true;
+		}
+
+		$this->redirectBack(
+			'owner_mismatch',
+			$order_id,
+			0,
+			$redirect_to,
+			array(
+				'expected_owner'   => (string) $owner_user_id,
+				'requested_action' => $requested_action,
+			)
+		);
+
+		return false;
 	}
 
 	private function resolveAdminRedirect(string $redirect_to, int $order_id): string
