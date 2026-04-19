@@ -271,7 +271,7 @@ final class DashboardPage
 		} else {
 			foreach ($audit_overview as $audit_row) {
 				echo '<tr>';
-				echo '<td>' . esc_html((string) ($audit_row['event_type'] ?? '')) . '</td>';
+				echo '<td>' . esc_html($this->formatAuditEventLabel((string) ($audit_row['event_type'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html((string) ((int) ($audit_row['events_count'] ?? 0))) . '</td>';
 				echo '</tr>';
 			}
@@ -691,6 +691,23 @@ final class DashboardPage
 		);
 
 		return $labels[$key] ?? $key;
+	}
+
+	private function formatAuditEventLabel(string $event_type): string
+	{
+		$labels = array(
+			'order_status_changed'          => __('Zmena stavu objednávky', 'ar-design-reporting'),
+			'order_taken_over'              => __('Prevzatie objednávky', 'ar-design-reporting'),
+			'order_packed'                  => __('Označenie objednávky ako zabalená', 'ar-design-reporting'),
+			'order_fulfilled'               => __('Označenie objednávky ako vybavená', 'ar-design-reporting'),
+			'order_status_set_to_packed'    => __('Nastavenie Woo stavu na Zabalená', 'ar-design-reporting'),
+			'order_status_set_to_fulfilled' => __('Nastavenie Woo stavu na Vybavená', 'ar-design-reporting'),
+			'order_failed_transition_blocked' => __('Zablokovaný prechod na Neúspešná', 'ar-design-reporting'),
+			'order_permanent_delete_blocked'  => __('Zablokované trvalé zmazanie objednávky', 'ar-design-reporting'),
+			'order_archived'                => __('Archivácia objednávky', 'ar-design-reporting'),
+		);
+
+		return $labels[$event_type] ?? $event_type;
 	}
 
 	private function getWorkflowFieldLabel(string $key): string
