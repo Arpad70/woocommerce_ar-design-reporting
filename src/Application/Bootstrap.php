@@ -173,6 +173,8 @@ final class Bootstrap
 			echo '</p></div>';
 		}
 
+		$this->renderOwnerMismatchTransientNotice();
+
 		if ( isset( $_GET['ard_admin'] ) && is_string( $_GET['ard_admin'] ) ) {
 			$action   = sanitize_key( wp_unslash( $_GET['ard_admin'] ) );
 			$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
@@ -260,9 +262,18 @@ final class Bootstrap
 				);
 			}
 
-			if ( 'owner_mismatch_invalid' === $action ) {
-				$message = __( 'Zmena priradenia sa nepodarila vykonať. Skontrolujte objednávku a skúste to znovu.', 'ar-design-reporting' );
-			}
+				if ( 'owner_mismatch_invalid' === $action ) {
+					$message = __( 'Zmena priradenia sa nepodarila vykonať. Skontrolujte objednávku a skúste to znovu.', 'ar-design-reporting' );
+				}
+
+				if ( 'reassigned_and_status_applied' === $action ) {
+					$target_status = isset( $_GET['target_status'] ) ? sanitize_key( wp_unslash( $_GET['target_status'] ) ) : '';
+					$message = sprintf(
+						/* translators: %s: target status */
+						__( 'Priradenie objednávky bolo zmenené a stav bol úspešne nastavený na %s.', 'ar-design-reporting' ),
+						'' !== $target_status ? $target_status : __( 'zvolený stav', 'ar-design-reporting' )
+					);
+				}
 
 			if ( 'email_save_failed' === $action ) {
 				$message = __( 'Nastavenie e-mailového reportu sa nepodarilo uložiť. Skontrolujte e-mailovú adresu.', 'ar-design-reporting' );
@@ -281,6 +292,68 @@ final class Bootstrap
 				echo '<div class="notice notice-success"><p>' . esc_html( $message ) . '</p></div>';
 			}
 		}
+	}
+
+	private function renderOwnerMismatchTransientNotice(): void
+	{
+		if ( ! function_exists( 'get_transient' ) ) {
+			return;
+		}
+
+		$current_user_id = get_current_user_id();
+
+		if ( $current_user_id <= 0 ) {
+			return;
+		}
+
+		$transient_key = 'ard_owner_mismatch_' . $current_user_id;
+		$notice_data   = get_transient( $transient_key );
+
+		if ( ! is_array( $notice_data ) ) {
+			return;
+		}
+
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( $transient_key );
+		}
+
+		$order_id       = isset( $notice_data['order_id'] ) ? (int) $notice_data['order_id'] : 0;
+		$expected_owner = isset( $notice_data['expected_owner'] ) ? (int) $notice_data['expected_owner'] : 0;
+		$from_status    = isset( $notice_data['from_status'] ) ? sanitize_key( (string) $notice_data['from_status'] ) : '';
+		$to_status      = isset( $notice_data['to_status'] ) ? sanitize_key( (string) $notice_data['to_status'] ) : '';
+		$redirect_to    = $this->getCurrentAdminUrl();
+
+		if ( $order_id <= 0 || '' === $to_status ) {
+			return;
+		}
+
+		echo '<div class="notice notice-warning"><p>';
+		echo esc_html(
+			sprintf(
+				/* translators: 1: order ID, 2: expected owner label, 3: current user label, 4: from status, 5: requested status */
+				__(
+					'Zmena stavu objednávky #%1$d bola zablokovaná. Objednávka je priradená používateľovi %2$s, prihlásený je %3$s. Pokus o zmenu: %4$s -> %5$s.',
+					'ar-design-reporting'
+				),
+				$order_id,
+				$this->formatUserLabel( $expected_owner ),
+				$this->formatUserLabel( $current_user_id ),
+				'' !== $from_status ? $from_status : '-',
+				$to_status
+			)
+		);
+		echo '</p><p>';
+		echo esc_html( __( 'Ak chcete pokračovať, potvrďte zmenu priradenia a plugin znovu nastaví požadovaný stav.', 'ar-design-reporting' ) );
+		echo '</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px;">';
+		wp_nonce_field( 'ard_reassign_and_apply_status' );
+		echo '<input type="hidden" name="action" value="ard_reassign_and_apply_status" />';
+		echo '<input type="hidden" name="order_id" value="' . esc_attr( (string) $order_id ) . '" />';
+		echo '<input type="hidden" name="target_status" value="' . esc_attr( $to_status ) . '" />';
+		echo '<input type="hidden" name="redirect_to" value="' . esc_attr( $redirect_to ) . '" />';
+		submit_button( __( 'Zmeniť priradenie a použiť stav', 'ar-design-reporting' ), 'primary', 'submit', false );
+		echo '</form>';
+		echo '</div>';
 	}
 
 	private function formatRequestedActionLabel( string $requested_action ): string

@@ -33,6 +33,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_finish_processing', array($this, 'handleFinishProcessing'));
 		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
 		add_action('admin_post_ard_reassign_and_run', array($this, 'handleReassignAndRun'));
+		add_action('admin_post_ard_reassign_and_apply_status', array($this, 'handleReassignAndApplyStatus'));
 		add_action('admin_post_ard_save_default_manager', array($this, 'handleSaveDefaultManager'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
@@ -145,6 +146,34 @@ final class WorkflowActions
 			$redirect_to,
 			array(
 				'requested_action' => $requested_action,
+			)
+		);
+	}
+
+	public function handleReassignAndApplyStatus(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_reassign_and_apply_status');
+
+		$order_id      = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$target_status = isset($_POST['target_status']) ? sanitize_key(wp_unslash($_POST['target_status'])) : '';
+		$redirect_to   = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if ($order_id <= 0 || $actor_user_id <= 0 || '' === $target_status) {
+			$this->redirectBack('owner_mismatch_invalid', $order_id, 0, $redirect_to);
+		}
+
+		$this->processing_service->assignOrderOwner($order_id, $actor_user_id);
+		$applied = $this->processing_service->applyOrderStatusAfterReassign($order_id, $target_status, $actor_user_id);
+
+		$this->redirectBack(
+			$applied ? 'reassigned_and_status_applied' : 'owner_mismatch_invalid',
+			$order_id,
+			0,
+			$redirect_to,
+			array(
+				'target_status' => $target_status,
 			)
 		);
 	}

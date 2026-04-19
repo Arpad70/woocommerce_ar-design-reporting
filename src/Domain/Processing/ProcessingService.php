@@ -11,12 +11,15 @@ use ArDesign\Reporting\Infrastructure\Repository\OrderProcessingRepository;
 final class ProcessingService
 {
 	private const MANAGER_META_KEY = '_ard_manager_user_id';
+	private const OWNER_MISMATCH_TRANSIENT_PREFIX = 'ard_owner_mismatch_';
 
 	private OrderProcessingRepository $order_processing_repository;
 
 	private AuditLogger $audit_logger;
 
 	private OrderClassifier $order_classifier;
+
+	private bool $is_reverting_blocked_status = false;
 
 	public function __construct(
 		OrderProcessingRepository $order_processing_repository,
@@ -60,6 +63,10 @@ final class ProcessingService
 			return;
 		}
 
+		if ($this->is_reverting_blocked_status) {
+			return;
+		}
+
 		$record = $this->ensureRecord($order_id);
 
 		if (empty($record)) {
@@ -69,6 +76,30 @@ final class ProcessingService
 		$from_status = sanitize_key($from_status);
 		$to_status   = sanitize_key($to_status);
 		$actor_user_id = get_current_user_id() ?: null;
+		$owner_user_id = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
+
+		if ($this->shouldBlockOwnerMismatch($actor_user_id, $owner_user_id)) {
+			$this->revertWooOrderStatus($order_id, $from_status);
+			$this->storeOwnerMismatchNotice($order_id, (int) $actor_user_id, $owner_user_id, $from_status, $to_status);
+			$this->audit_logger->log(
+				'order_action_blocked_owner_mismatch',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array(
+					'status' => $from_status,
+					'owner_user_id' => $owner_user_id,
+				),
+				array(
+					'status' => $to_status,
+					'owner_user_id' => $owner_user_id,
+				),
+				array('source' => 'woocommerce_order_status_changed')
+			);
+
+			return;
+		}
 
 		if ($this->isFailedStatus($to_status) && ! $this->canTransitionToFailed($from_status)) {
 			$this->audit_logger->log(
@@ -91,7 +122,7 @@ final class ProcessingService
 			'updated_at_gmt' => current_time('mysql', true),
 		);
 
-		if (null !== $actor_user_id && $actor_user_id > 0) {
+		if (null !== $actor_user_id && $actor_user_id > 0 && $owner_user_id <= 0) {
 			$update_data['owner_user_id'] = $actor_user_id;
 		}
 
@@ -114,6 +145,50 @@ final class ProcessingService
 			array('status' => $to_status),
 			array('source' => 'woocommerce_order_status_changed')
 		);
+	}
+
+	public function applyOrderStatusAfterReassign(int $order_id, string $target_status, int $actor_user_id): bool
+	{
+		if (
+			$order_id <= 0
+			|| $actor_user_id <= 0
+			|| '' === $target_status
+			|| ! function_exists('wc_get_order')
+		) {
+			return false;
+		}
+
+		$target_status = sanitize_key($target_status);
+		$order = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return false;
+		}
+
+		$current_status = (string) $order->get_status();
+
+		if ($current_status === $target_status) {
+			return true;
+		}
+
+		$order->update_status(
+			$target_status,
+			__('Stav bol použitý po potvrdení zmeny priradenia objednávky.', 'ar-design-reporting'),
+			true
+		);
+
+		$this->audit_logger->log(
+			'order_status_applied_after_reassign',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array('woocommerce_status' => $current_status),
+			array('woocommerce_status' => $target_status),
+			array('source' => 'manual_reassign')
+		);
+
+		return true;
 	}
 
 	public function takeOverOrder(int $order_id, int $actor_user_id): void
@@ -455,6 +530,61 @@ final class ProcessingService
 	private function canTransitionToFailed(string $from_status): bool
 	{
 		return in_array($from_status, array('vybavena', 'completed'), true);
+	}
+
+	private function shouldBlockOwnerMismatch(?int $actor_user_id, int $owner_user_id): bool
+	{
+		return null !== $actor_user_id && $actor_user_id > 0 && $owner_user_id > 0 && $actor_user_id !== $owner_user_id;
+	}
+
+	private function revertWooOrderStatus(int $order_id, string $from_status): void
+	{
+		if ($order_id <= 0 || '' === $from_status || ! function_exists('wc_get_order')) {
+			return;
+		}
+
+		$order = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return;
+		}
+
+		$current_status = (string) $order->get_status();
+
+		if ($current_status === $from_status) {
+			return;
+		}
+
+		$this->is_reverting_blocked_status = true;
+
+		try {
+			$order->update_status(
+				$from_status,
+				__('Zmena stavu bola zablokovaná, objednávka je priradená inému používateľovi.', 'ar-design-reporting'),
+				true
+			);
+		} finally {
+			$this->is_reverting_blocked_status = false;
+		}
+	}
+
+	private function storeOwnerMismatchNotice(int $order_id, int $actor_user_id, int $owner_user_id, string $from_status, string $to_status): void
+	{
+		if ($actor_user_id <= 0 || ! function_exists('set_transient')) {
+			return;
+		}
+
+		set_transient(
+			self::OWNER_MISMATCH_TRANSIENT_PREFIX . $actor_user_id,
+			array(
+				'order_id'       => $order_id,
+				'expected_owner' => $owner_user_id,
+				'from_status'    => $from_status,
+				'to_status'      => $to_status,
+				'action'         => 'status_change',
+			),
+			300
+		);
 	}
 
 	/**
