@@ -91,6 +91,7 @@ final class DashboardPage
 
 		echo '<div class="wrap">';
 		$this->renderDashboardStyles();
+		$this->renderDashboardLayoutScript();
 		echo '<div class="ard-reporting-dashboard">';
 		echo '<h1>' . esc_html__('AR Design Reporting', 'ar-design-reporting') . '</h1>';
 		echo '<p>' . esc_html__('Dashboard zobrazuje objednávky, KPI, výkon zamestnancov a auditné udalosti podľa zvolených filtrov.', 'ar-design-reporting') . '</p>';
@@ -517,27 +518,126 @@ final class DashboardPage
 	private function renderDashboardStyles(): void
 	{
 		echo '<style>
-		.ard-reporting-dashboard { max-width: 1320px; }
-		.ard-reporting-dashboard h1 { margin-bottom: 6px; }
-		.ard-reporting-dashboard h2 { margin-top: 28px !important; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #dcdcde; }
-		.ard-reporting-dashboard p { line-height: 1.45; }
-		.ard-reporting-dashboard form { border-radius: 8px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
-		.ard-reporting-dashboard .widefat { border-radius: 8px; overflow: hidden; }
+		.ard-reporting-dashboard { max-width: 1400px; color: #1f2933; }
+		.ard-reporting-dashboard h1 { margin-bottom: 6px; font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+		.ard-reporting-dashboard h2 { margin-top: 0 !important; margin-bottom: 14px; font-size: 20px; border-bottom: none; padding-bottom: 0; }
+		.ard-reporting-dashboard h3 { margin: 14px 0 8px 0; font-size: 15px; }
+		.ard-reporting-dashboard p { line-height: 1.5; color: #445468; }
+		.ard-reporting-dashboard form { border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+		.ard-reporting-dashboard .widefat { border-radius: 12px; overflow: hidden; border: 1px solid #d9e0e7; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
 		.ard-reporting-dashboard .widefat thead th { background: #f7f7f7; font-weight: 600; }
 		.ard-reporting-dashboard .widefat td, .ard-reporting-dashboard .widefat th { padding: 10px 12px; vertical-align: top; }
 		.ard-reporting-dashboard input[type="date"],
 		.ard-reporting-dashboard input[type="number"],
 		.ard-reporting-dashboard input[type="email"],
-		.ard-reporting-dashboard select { min-height: 34px; border-radius: 6px; }
-		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
-		.ard-kpi-card { background: #fff; border: 1px solid #dcdcde; border-radius: 10px; padding: 12px 14px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
-		.ard-kpi-label { font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #50575e; margin-bottom: 6px; }
-		.ard-kpi-value { font-size: 24px; font-weight: 600; color: #1d2327; }
+		.ard-reporting-dashboard select { min-height: 36px; border-radius: 8px; border-color: #cbd5e1; }
+		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
+		.ard-kpi-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid #dbe6f3; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+		.ard-kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #52617a; margin-bottom: 7px; }
+		.ard-kpi-value { font-size: 24px; font-weight: 700; color: #0f172a; }
+		.ard-pro-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr); gap: 16px; margin-top: 18px; align-items: start; }
+		.ard-panel { background: #fff; border: 1px solid #d9e0e7; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
+		.ard-panel + .ard-panel { margin-top: 0; }
+		.ard-panel-title { margin: 0 0 12px 0; font-size: 17px; font-weight: 700; color: #0f172a; }
+		.ard-subsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ebf3; }
+		.ard-subsection:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+		.ard-subsection h3 { margin-top: 0; margin-bottom: 8px; font-size: 14px; color: #1f2937; text-transform: uppercase; letter-spacing: .04em; }
+		.ard-reporting-dashboard > h2 { display: none; }
 		@media (max-width: 900px) {
+			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
 			.ard-kpi-value { font-size: 20px; }
 		}
 		</style>';
+	}
+
+	private function renderDashboardLayoutScript(): void
+	{
+		echo '<script>
+		document.addEventListener("DOMContentLoaded", function () {
+			var root = document.querySelector(".ard-reporting-dashboard");
+			if (!root || root.dataset.layoutApplied === "1") {
+				return;
+			}
+			root.dataset.layoutApplied = "1";
+
+			var headings = Array.prototype.slice.call(root.querySelectorAll(":scope > h2"));
+			if (!headings.length) {
+				return;
+			}
+
+			var blocks = {};
+			headings.forEach(function (h2) {
+				var title = (h2.textContent || "").trim();
+				var nodes = [h2];
+				var cursor = h2.nextSibling;
+				while (cursor && !(cursor.nodeType === 1 && cursor.tagName === "H2")) {
+					var next = cursor.nextSibling;
+					nodes.push(cursor);
+					cursor = next;
+				}
+				blocks[title] = nodes;
+			});
+
+			var groups = [
+				{ key: "main", title: "Prehľad výkonu", sectionTitles: ["KPI snapshot", "Prehľad objednávok", "Výkon manažéra (zahájenie workflow)", "Výkon zamestnancov"] },
+				{ key: "workflow", title: "Workflow a audit", sectionTitles: ["Workflow detail objednávky", "Auditný prehľad", "Posledné archivácie zmazaných objednávok"] },
+				{ key: "ops", title: "Nastavenia a export", sectionTitles: ["Nastavenie manažéra procesu", "Export a emailing", "Reporting tabulky", "Připravené moduly", "Workflow akce", "Ďalší krok"] }
+			];
+
+			var grid = document.createElement("div");
+			grid.className = "ard-pro-grid";
+
+			groups.forEach(function (group) {
+				var panel = document.createElement("section");
+				panel.className = "ard-panel ard-panel-" + group.key;
+				var panelTitle = document.createElement("h2");
+				panelTitle.className = "ard-panel-title";
+				panelTitle.textContent = group.title;
+				panel.appendChild(panelTitle);
+
+				var found = false;
+				group.sectionTitles.forEach(function (sectionTitle) {
+					var sectionNodes = blocks[sectionTitle];
+					if (!sectionNodes || !sectionNodes.length) {
+						return;
+					}
+					found = true;
+					var subsection = document.createElement("div");
+					subsection.className = "ard-subsection";
+					var label = document.createElement("h3");
+					label.textContent = sectionTitle;
+					subsection.appendChild(label);
+
+					sectionNodes.forEach(function (node, index) {
+						if (index === 0) {
+							return;
+						}
+						subsection.appendChild(node);
+					});
+
+					panel.appendChild(subsection);
+				});
+
+				if (found) {
+					grid.appendChild(panel);
+				}
+			});
+
+			var firstHeading = headings[0];
+			if (!firstHeading) {
+				return;
+			}
+
+			headings.forEach(function (h) {
+				if (h.parentNode === root) {
+					root.removeChild(h);
+				}
+			});
+
+			root.appendChild(grid);
+		});
+		</script>';
 	}
 
 	private function getKpiLabel(string $key): string
