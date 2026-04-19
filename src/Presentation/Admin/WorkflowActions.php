@@ -32,6 +32,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_take_over_order', array($this, 'handleTakeOver'));
 		add_action('admin_post_ard_finish_processing', array($this, 'handleFinishProcessing'));
 		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
+		add_action('admin_post_ard_mark_order_cancelled', array($this, 'handleMarkOrderCancelled'));
 		add_action('admin_post_ard_reassign_and_run', array($this, 'handleReassignAndRun'));
 		add_action('admin_post_ard_reassign_and_apply_status', array($this, 'handleReassignAndApplyStatus'));
 		add_action('admin_post_ard_save_default_manager', array($this, 'handleSaveDefaultManager'));
@@ -139,6 +140,10 @@ final class WorkflowActions
 			$this->processing_service->completeFulfillment($order_id, $actor_user_id);
 		}
 
+		if ('mark_cancelled' === $requested_action) {
+			$this->processing_service->markOrderCancelled($order_id, $actor_user_id);
+		}
+
 		$this->redirectBack(
 			'reassigned_and_completed',
 			$order_id,
@@ -148,6 +153,26 @@ final class WorkflowActions
 				'requested_action' => $requested_action,
 			)
 		);
+	}
+
+	public function handleMarkOrderCancelled(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_mark_order_cancelled');
+
+		$order_id      = isset($_POST['order_id']) ? absint(wp_unslash($_POST['order_id'])) : 0;
+		$redirect_to   = isset($_POST['redirect_to']) ? esc_url_raw(wp_unslash($_POST['redirect_to'])) : '';
+		$actor_user_id = get_current_user_id();
+
+		if (! $this->ensureOrderOwnershipOrPrompt($order_id, $actor_user_id, 'mark_cancelled', $redirect_to)) {
+			return;
+		}
+
+		if ($order_id > 0) {
+			$this->processing_service->markOrderCancelled($order_id, $actor_user_id);
+		}
+
+		$this->redirectBack('marked_cancelled', $order_id, 0, $redirect_to);
 	}
 
 	public function handleReassignAndApplyStatus(): void

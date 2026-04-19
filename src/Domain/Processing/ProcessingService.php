@@ -346,6 +346,60 @@ final class ProcessingService
 		);
 	}
 
+	public function markOrderCancelled(int $order_id, int $actor_user_id): void
+	{
+		if ($order_id <= 0 || $actor_user_id <= 0 || ! function_exists('wc_get_order')) {
+			return;
+		}
+
+		$record = $this->ensureRecord($order_id);
+		$order  = wc_get_order($order_id);
+
+		if (! $order instanceof \WC_Order) {
+			return;
+		}
+
+		$target_status  = $this->resolveCancelledStatusSlug();
+		$current_status = (string) $order->get_status();
+
+		if ('' === $target_status) {
+			return;
+		}
+
+		if ($current_status !== $target_status) {
+			$order->update_status(
+				$target_status,
+				__('Objednávka bola označená ako Zrušená namiesto odstránenia.', 'ar-design-reporting'),
+				true
+			);
+		}
+
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'owner_user_id'  => $actor_user_id,
+				'status'         => $target_status,
+				'source_trigger' => 'manual_cancel_instead_delete',
+				'updated_at_gmt' => current_time('mysql', true),
+			)
+		);
+
+		$this->audit_logger->log(
+			'order_marked_cancelled',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array(
+				'status' => $record['status'] ?? $current_status,
+			),
+			array(
+				'status' => $target_status,
+			),
+			array('source' => 'manual_cancel_instead_delete')
+		);
+	}
+
 	/**
 	 * @return array<string, mixed>
 	 */
@@ -517,6 +571,41 @@ final class ProcessingService
 			if ('zabalena' === $slug || 'Zabalená' === $title || 'Zabalena' === $title) {
 				return $slug;
 			}
+		}
+
+		return '';
+	}
+
+	private function resolveCancelledStatusSlug(): string
+	{
+		if (! function_exists('wc_get_order_statuses')) {
+			return '';
+		}
+
+		$statuses = wc_get_order_statuses();
+
+		if (! is_array($statuses) || empty($statuses)) {
+			return '';
+		}
+
+		foreach ($statuses as $status_key => $label) {
+			$key   = (string) $status_key;
+			$title = trim(wp_strip_all_tags((string) $label));
+			$slug  = 0 === strpos($key, 'wc-') ? substr($key, 3) : $key;
+
+			if (
+				'cancelled' === $slug
+				|| 'zrusena' === $slug
+				|| 'Zrušená' === $title
+				|| 'Zrusena' === $title
+				|| 'Zrušena' === $title
+			) {
+				return $slug;
+			}
+		}
+
+		if (isset($statuses['wc-cancelled'])) {
+			return 'cancelled';
 		}
 
 		return '';

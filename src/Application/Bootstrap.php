@@ -173,6 +173,7 @@ final class Bootstrap
 			echo '</p></div>';
 		}
 
+		$this->renderDeleteBlockedTransientNotice();
 		$this->renderOwnerMismatchTransientNotice();
 
 		if ( isset( $_GET['ard_admin'] ) && is_string( $_GET['ard_admin'] ) ) {
@@ -237,7 +238,7 @@ final class Bootstrap
 				);
 			}
 
-			if ( 'complete_fulfillment' === $action ) {
+				if ( 'complete_fulfillment' === $action ) {
 				$message = sprintf(
 					/* translators: %d: order ID */
 					__( 'Objednávka #%d byla označena jako vybavená.', 'ar-design-reporting' ),
@@ -264,6 +265,14 @@ final class Bootstrap
 
 				if ( 'owner_mismatch_invalid' === $action ) {
 					$message = __( 'Zmena priradenia sa nepodarila vykonať. Skontrolujte objednávku a skúste to znovu.', 'ar-design-reporting' );
+				}
+
+				if ( 'marked_cancelled' === $action ) {
+					$message = sprintf(
+						/* translators: %d: order ID */
+						__( 'Objednávka #%d bola označená ako Zrušená.', 'ar-design-reporting' ),
+						$order_id
+					);
 				}
 
 				if ( 'reassigned_and_status_applied' === $action ) {
@@ -356,12 +365,68 @@ final class Bootstrap
 		echo '</div>';
 	}
 
+	private function renderDeleteBlockedTransientNotice(): void
+	{
+		if ( ! function_exists( 'get_transient' ) ) {
+			return;
+		}
+
+		$current_user_id = get_current_user_id();
+
+		if ( $current_user_id <= 0 ) {
+			return;
+		}
+
+		$transient_key = 'ard_delete_blocked_' . $current_user_id;
+		$notice_data   = get_transient( $transient_key );
+
+		if ( ! is_array( $notice_data ) ) {
+			return;
+		}
+
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( $transient_key );
+		}
+
+		$order_id    = isset( $notice_data['order_id'] ) ? (int) $notice_data['order_id'] : 0;
+		$attempt     = isset( $notice_data['attempt'] ) ? sanitize_key( (string) $notice_data['attempt'] ) : 'delete';
+		$redirect_to = $this->getCurrentAdminUrl();
+
+		if ( $order_id <= 0 ) {
+			return;
+		}
+
+		$attempt_label = 'trash' === $attempt ? __( 'presunúť do koša', 'ar-design-reporting' ) : __( 'trvalo zmazať', 'ar-design-reporting' );
+
+		echo '<div class="notice notice-warning"><p>';
+		echo esc_html(
+			sprintf(
+				/* translators: 1: order ID, 2: blocked attempt label */
+				__( 'Akcia %2$s pre objednávku #%1$d je zablokovaná. Objednávky sa nesmú mazať ani presúvať do koša.', 'ar-design-reporting' ),
+				$order_id,
+				$attempt_label
+			)
+		);
+		echo '</p><p>';
+		echo esc_html( __( 'Povolená je iba zmena stavu na Zrušená.', 'ar-design-reporting' ) );
+		echo '</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px;">';
+		wp_nonce_field( 'ard_mark_order_cancelled' );
+		echo '<input type="hidden" name="action" value="ard_mark_order_cancelled" />';
+		echo '<input type="hidden" name="order_id" value="' . esc_attr( (string) $order_id ) . '" />';
+		echo '<input type="hidden" name="redirect_to" value="' . esc_attr( $redirect_to ) . '" />';
+		submit_button( __( 'Označiť ako Zrušená', 'ar-design-reporting' ), 'primary', 'submit', false );
+		echo '</form>';
+		echo '</div>';
+	}
+
 	private function formatRequestedActionLabel( string $requested_action ): string
 	{
 		$labels = array(
 			'take_over'          => __( 'Prevziať objednávku', 'ar-design-reporting' ),
 			'finish_processing'  => __( 'Označiť ako Zabalená', 'ar-design-reporting' ),
 			'complete_fulfillment' => __( 'Označiť ako Vybavená', 'ar-design-reporting' ),
+			'mark_cancelled'     => __( 'Označiť ako Zrušená', 'ar-design-reporting' ),
 		);
 
 		return $labels[ $requested_action ] ?? $requested_action;
