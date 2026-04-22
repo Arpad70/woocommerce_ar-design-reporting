@@ -12,6 +12,7 @@ final class ProcessingService
 {
 	private const MANAGER_META_KEY = '_ard_manager_user_id';
 	private const OWNER_MISMATCH_TRANSIENT_PREFIX = 'ard_owner_mismatch_';
+	private const TRANSITION_BLOCKED_TRANSIENT_PREFIX = 'ard_transition_blocked_';
 
 	private OrderProcessingRepository $order_processing_repository;
 
@@ -75,6 +76,8 @@ final class ProcessingService
 
 		$from_status = sanitize_key($from_status);
 		$to_status   = sanitize_key($to_status);
+		$canonical_from_status = $this->normalizeStatus($from_status);
+		$canonical_to_status   = $this->normalizeStatus($to_status);
 		$actor_user_id = get_current_user_id() ?: null;
 		$owner_user_id = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
 
@@ -101,23 +104,40 @@ final class ProcessingService
 			return;
 		}
 
-		if ($this->isFailedStatus($to_status) && ! $this->canTransitionToFailed($from_status)) {
+		if (! $this->isTransitionAllowed($canonical_from_status, $canonical_to_status)) {
+			$this->revertWooOrderStatus($order_id, $from_status);
+			$this->storeTransitionBlockedNotice($order_id, $canonical_from_status, $canonical_to_status, $actor_user_id ?? 0);
 			$this->audit_logger->log(
-				'order_failed_transition_blocked',
+				'order_status_transition_not_allowed',
 				'order',
 				$order_id,
 				$order_id,
 				$actor_user_id,
-				array('status' => $from_status),
-				array('status' => $to_status),
+				array('status' => $canonical_from_status),
+				array('status' => $canonical_to_status),
 				array('source' => 'woocommerce_order_status_changed')
 			);
 
 			return;
 		}
 
+		if ($this->isFailedStatus($canonical_to_status) && ! $this->canTransitionToFailed($canonical_from_status)) {
+			$this->audit_logger->log(
+				'order_failed_transition_blocked',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+					array('status' => $canonical_from_status),
+					array('status' => $canonical_to_status),
+					array('source' => 'woocommerce_order_status_changed')
+				);
+
+			return;
+		}
+
 		$update_data = array(
-			'status'         => $to_status,
+			'status'         => $canonical_to_status,
 			'source_trigger' => 'woocommerce_order_status_changed',
 			'updated_at_gmt' => current_time('mysql', true),
 		);
@@ -126,7 +146,7 @@ final class ProcessingService
 			$update_data['owner_user_id'] = $actor_user_id;
 		}
 
-		if ('na-odoslanie' === $to_status) {
+		if ('na-odoslanie' === $canonical_to_status) {
 			$update_data['started_at_gmt'] = current_time('mysql', true);
 		}
 
@@ -141,8 +161,8 @@ final class ProcessingService
 			$order_id,
 			$order_id,
 			$actor_user_id,
-			array('status' => $from_status),
-			array('status' => $to_status),
+			array('status' => $canonical_from_status),
+			array('status' => $canonical_to_status),
 			array('source' => 'woocommerce_order_status_changed')
 		);
 	}
@@ -158,7 +178,7 @@ final class ProcessingService
 			return false;
 		}
 
-		$target_status = sanitize_key($target_status);
+		$target_status = $this->normalizeStatus(sanitize_key($target_status));
 		$order = wc_get_order($order_id);
 
 		if (! $order instanceof \WC_Order) {
@@ -167,8 +187,25 @@ final class ProcessingService
 
 		$current_status = (string) $order->get_status();
 
+		$current_status = $this->normalizeStatus($current_status);
+
 		if ($current_status === $target_status) {
 			return true;
+		}
+
+		if (! $this->isTransitionAllowed($current_status, $target_status)) {
+			$this->audit_logger->log(
+				'order_status_transition_not_allowed',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $current_status),
+				array('status' => $target_status),
+				array('source' => 'manual_reassign')
+			);
+
+			return false;
 		}
 
 		$order->update_status(
@@ -266,6 +303,22 @@ final class ProcessingService
 			return;
 		}
 
+		$current_status = $this->normalizeStatus((string) ($record['status'] ?? ''));
+
+		if (! $this->isTransitionAllowed($current_status, 'zabalena')) {
+			$this->audit_logger->log(
+				'order_status_transition_not_allowed',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $current_status),
+				array('status' => 'zabalena'),
+				array('source' => 'manual_packed')
+			);
+			return;
+		}
+
 		$finished_at = current_time('mysql', true);
 		$status = $this->updateWooOrderToPackedStatus($order_id, $actor_user_id);
 
@@ -302,6 +355,22 @@ final class ProcessingService
 	{
 		$record = $this->ensureRecord($order_id);
 		if (empty($record)) {
+			return;
+		}
+
+		$current_status = $this->normalizeStatus((string) ($record['status'] ?? ''));
+
+		if (! $this->isTransitionAllowed($current_status, 'vybavena')) {
+			$this->audit_logger->log(
+				'order_status_transition_not_allowed',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $current_status),
+				array('status' => 'vybavena'),
+				array('source' => 'manual_fulfillment')
+			);
 			return;
 		}
 
@@ -360,9 +429,25 @@ final class ProcessingService
 		}
 
 		$target_status  = $this->resolveCancelledStatusSlug();
-		$current_status = (string) $order->get_status();
+		$current_status = $this->normalizeStatus((string) $order->get_status());
 
 		if ('' === $target_status) {
+			return;
+		}
+
+		$target_status = $this->normalizeStatus($target_status);
+
+		if (! $this->isTransitionAllowed($current_status, $target_status)) {
+			$this->audit_logger->log(
+				'order_status_transition_not_allowed',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $current_status),
+				array('status' => $target_status),
+				array('source' => 'manual_cancel_instead_delete')
+			);
 			return;
 		}
 
@@ -621,6 +706,51 @@ final class ProcessingService
 		return in_array($from_status, array('vybavena', 'completed'), true);
 	}
 
+	private function normalizeStatus(string $status): string
+	{
+		$status = sanitize_key($status);
+
+		$aliases = array(
+			'caka-sa-na-platbu' => 'pending',
+			'spracovava-sa'     => 'processing',
+			'pozastavena'       => 'on-hold',
+			'zrusena'           => 'cancelled',
+			'refundovana'       => 'refunded',
+			'neuspesna'         => 'failed',
+			'completed'         => 'vybavena',
+		);
+
+		return $aliases[$status] ?? $status;
+	}
+
+	private function isTransitionAllowed(string $from_status, string $to_status): bool
+	{
+		$from_status = $this->normalizeStatus($from_status);
+		$to_status   = $this->normalizeStatus($to_status);
+
+		if ('' === $from_status || '' === $to_status || $from_status === $to_status) {
+			return true;
+		}
+
+		$allowed = array(
+			'new'          => array('pending', 'processing', 'on-hold', 'na-odoslanie', 'cancelled'),
+			'pending'      => array('na-odoslanie', 'cancelled', 'on-hold'),
+			'processing'   => array('na-odoslanie', 'cancelled', 'on-hold'),
+			'on-hold'      => array('na-odoslanie', 'cancelled'),
+			'na-odoslanie' => array('zabalena', 'on-hold', 'cancelled'),
+			'zabalena'     => array('vybavena', 'on-hold', 'cancelled'),
+			'vybavena'     => array('failed', 'refunded'),
+			'failed'       => array('on-hold', 'cancelled'),
+			'cancelled'    => array('refunded'),
+		);
+
+		if (! isset($allowed[$from_status])) {
+			return false;
+		}
+
+		return in_array($to_status, $allowed[$from_status], true);
+	}
+
 	private function shouldBlockOwnerMismatch(?int $actor_user_id, int $owner_user_id): bool
 	{
 		return null !== $actor_user_id && $actor_user_id > 0 && $owner_user_id > 0 && $actor_user_id !== $owner_user_id;
@@ -671,6 +801,23 @@ final class ProcessingService
 				'from_status'    => $from_status,
 				'to_status'      => $to_status,
 				'action'         => 'status_change',
+			),
+				300
+		);
+	}
+
+	private function storeTransitionBlockedNotice(int $order_id, string $from_status, string $to_status, int $actor_user_id): void
+	{
+		if ($actor_user_id <= 0 || ! function_exists('set_transient')) {
+			return;
+		}
+
+		set_transient(
+			self::TRANSITION_BLOCKED_TRANSIENT_PREFIX . $actor_user_id,
+			array(
+				'order_id'    => $order_id,
+				'from_status' => $from_status,
+				'to_status'   => $to_status,
 			),
 			300
 		);

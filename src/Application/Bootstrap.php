@@ -173,6 +173,7 @@ final class Bootstrap
 			echo '</p></div>';
 		}
 
+		$this->renderTransitionBlockedTransientNotice();
 		$this->renderDeleteBlockedTransientNotice();
 		$this->renderOwnerMismatchTransientNotice();
 
@@ -363,6 +364,50 @@ final class Bootstrap
 		submit_button( __( 'Zmeniť priradenie a použiť stav', 'ar-design-reporting' ), 'primary', 'submit', false );
 		echo '</form>';
 		echo '</div>';
+	}
+
+	private function renderTransitionBlockedTransientNotice(): void
+	{
+		if ( ! function_exists( 'get_transient' ) ) {
+			return;
+		}
+
+		$current_user_id = get_current_user_id();
+
+		if ( $current_user_id <= 0 ) {
+			return;
+		}
+
+		$transient_key = 'ard_transition_blocked_' . $current_user_id;
+		$notice_data   = get_transient( $transient_key );
+
+		if ( ! is_array( $notice_data ) ) {
+			return;
+		}
+
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( $transient_key );
+		}
+
+		$order_id    = isset( $notice_data['order_id'] ) ? (int) $notice_data['order_id'] : 0;
+		$from_status = isset( $notice_data['from_status'] ) ? sanitize_key( (string) $notice_data['from_status'] ) : '';
+		$to_status   = isset( $notice_data['to_status'] ) ? sanitize_key( (string) $notice_data['to_status'] ) : '';
+
+		if ( $order_id <= 0 || '' === $to_status ) {
+			return;
+		}
+
+		echo '<div class="notice notice-warning"><p>';
+		echo esc_html(
+			sprintf(
+				/* translators: 1: order ID, 2: from status, 3: to status */
+				__( 'Zmena stavu objednávky #%1$d bola zablokovaná: nepovolený prechod %2$s -> %3$s podľa workflow matice.', 'ar-design-reporting' ),
+				$order_id,
+				'' !== $from_status ? $from_status : '-',
+				$to_status
+			)
+		);
+		echo '</p></div>';
 	}
 
 	private function renderDeleteBlockedTransientNotice(): void

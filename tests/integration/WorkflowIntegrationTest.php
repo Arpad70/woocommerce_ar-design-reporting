@@ -27,9 +27,11 @@ function run_workflow_integration_test(): void
 	$order_processing_table = $tables->orderProcessing();
 
 	$processing_service->initializeOrder(1001);
+	$processing_service->handleStatusChange(1001, 'new', 'processing');
+	$processing_service->handleStatusChange(1001, 'processing', 'failed');
+	$processing_service->handleStatusChange(1001, 'processing', 'na-odoslanie');
 	$processing_service->takeOverOrder(1001, 777);
 	$processing_service->finishProcessing(1001, 777);
-	$processing_service->handleStatusChange(1001, 'processing', 'failed');
 	$processing_service->completeFulfillment(1001, 777);
 	$processing_service->handleStatusChange(1001, 'vybavena', 'failed');
 

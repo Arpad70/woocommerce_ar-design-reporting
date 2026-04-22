@@ -704,6 +704,7 @@ final class DashboardPage
 			'order_status_set_to_packed'    => __('Nastavenie Woo stavu na Zabalená', 'ar-design-reporting'),
 			'order_status_set_to_fulfilled' => __('Nastavenie Woo stavu na Vybavená', 'ar-design-reporting'),
 			'order_status_applied_after_reassign' => __('Použitie zmeny stavu po zmene priradenia', 'ar-design-reporting'),
+			'order_status_transition_not_allowed' => __('Zablokovaný nepovolený prechod stavov', 'ar-design-reporting'),
 			'order_action_blocked_owner_mismatch' => __('Zablokovaná akcia: objednávka priradená inému používateľovi', 'ar-design-reporting'),
 			'order_marked_cancelled'        => __('Označenie objednávky ako Zrušená', 'ar-design-reporting'),
 			'order_delete_attempt_blocked'  => __('Zablokovaný pokus o zmazanie/koš', 'ar-design-reporting'),
@@ -796,8 +797,10 @@ final class DashboardPage
 				'woocommerce_new_order'            => __('Automaticky při vytvoření objednávky', 'ar-design-reporting'),
 				'woocommerce_order_status_changed' => __('Automaticky při změně stavu objednávky', 'ar-design-reporting'),
 				'manual_take_over'                 => __('Ruční převzetí objednávky', 'ar-design-reporting'),
+				'manual_reassign'                  => __('Ruční změna priradenia objednávky', 'ar-design-reporting'),
 				'manual_packed'                    => __('Ruční označení objednávky jako zabalené', 'ar-design-reporting'),
 				'manual_fulfillment'               => __('Ruční označení objednávky jako vybavené', 'ar-design-reporting'),
+				'manual_cancel_instead_delete'     => __('Ruční označení objednávky jako zrušené (místo smazání)', 'ar-design-reporting'),
 			);
 
 			return $labels[(string) $value] ?? (string) $value;
