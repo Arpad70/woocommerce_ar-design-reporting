@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 - 2026-04-23
+
+- reporting dashboard nyní zobrazuje obchodní číslo objednávky i interní ID (`#číslo (ID xxx)`), aby nedocházelo k záměně
+- přidána ochrana proti automatickému rušení nezaplacených objednávek WooCommerce cronem pro platební metody `dobírka (cod)` a `bankový prevod (bacs)`
+
 ## 0.3.0 - 2026-04-18
 
 - rozšírené workflow na meranie celého procesu vybavenia objednávky podľa stavov
