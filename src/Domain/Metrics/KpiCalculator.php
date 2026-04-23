@@ -155,16 +155,14 @@ final class KpiCalculator
 		}
 
 		$total_orders = count($order_ids);
+		$kpi_eligible_order_ids = $this->order_processing_repository->getKpiEligibleOrderIds($order_ids);
+		$workflow_audited_order_ids = $this->audit_log_repository->getOrderIdsWithWorkflowAuditEvents($order_ids);
+		$kpi_eligible_map = array_fill_keys($kpi_eligible_order_ids, true);
+		$workflow_audited_map = array_fill_keys($workflow_audited_order_ids, true);
 		$kpi_orders = 0;
 
 		foreach ($order_ids as $order_id) {
-			$order = wc_get_order((int) $order_id);
-
-			if (! $order instanceof \WC_Order) {
-				continue;
-			}
-
-			if ($this->orderHasAnyKpiMetric($order)) {
+			if (isset($kpi_eligible_map[$order_id]) && isset($workflow_audited_map[$order_id])) {
 				$kpi_orders++;
 			}
 		}
@@ -173,23 +171,5 @@ final class KpiCalculator
 			'total_orders' => $total_orders,
 			'kpi_orders'   => $kpi_orders,
 		);
-	}
-
-	private function orderHasAnyKpiMetric(\WC_Order $order): bool
-	{
-		$status   = sanitize_key((string) $order->get_status());
-		$total    = (float) $order->get_total();
-		$refunded = (float) $order->get_total_refunded();
-
-		// Každá objednávka se promítá alespoň do některé KPI (obrat / storna / netto / AOV).
-		if (in_array($status, array('cancelled', 'failed'), true)) {
-			return true;
-		}
-
-		if (0.0 !== $total || $refunded > 0.0) {
-			return true;
-		}
-
-		return false;
 	}
 }

@@ -300,6 +300,36 @@ class OrderProcessingRepository
 	}
 
 	/**
+	 * @param array<int, int> $order_ids
+	 * @return array<int, int>
+	 */
+	public function getKpiEligibleOrderIds(array $order_ids): array
+	{
+		global $wpdb;
+
+		$order_ids = array_values(array_filter(array_map('absint', $order_ids)));
+
+		if (empty($order_ids)) {
+			return array();
+		}
+
+		$table = $this->tables->orderProcessing();
+		$ids_sql = implode(',', $order_ids);
+		$rows = $wpdb->get_col(
+			"SELECT order_id
+			FROM {$table}
+			WHERE order_id IN ({$ids_sql})
+				AND is_kpi_included = 1"
+		);
+
+		if (! is_array($rows)) {
+			return array();
+		}
+
+		return array_values(array_filter(array_map('absint', $rows)));
+	}
+
+	/**
 	 * @param array<int, string> $where_parts
 	 * @param array<int, string> $params
 	 * @param array<string, string> $filters

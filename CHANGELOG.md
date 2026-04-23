@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4 - 2026-04-24
+
+- KPI Snapshot: `Objednávky započítané do KPI` nyní zahrnují pouze objednávky s auditovatelnou workflow stopou
+- historické objednávky bez workflow auditu se již do KPI počtu nezapočítávají
+
 ## 0.3.3 - 2026-04-24
 
 - KPI Snapshot: `Počet objednávek` je nyní skutečný celkový počet WooCommerce objednávek za období ve filtru

@@ -112,6 +112,46 @@ class AuditLogRepository
 	}
 
 	/**
+	 * @param array<int, int> $order_ids
+	 * @return array<int, int>
+	 */
+	public function getOrderIdsWithWorkflowAuditEvents(array $order_ids): array
+	{
+		global $wpdb;
+
+		$order_ids = array_values(array_filter(array_map('absint', $order_ids)));
+
+		if (empty($order_ids)) {
+			return array();
+		}
+
+		$table = $this->tables->auditLog();
+		$ids_sql = implode(',', $order_ids);
+		$event_types = array(
+			'order_status_changed',
+			'order_taken_over',
+			'order_owner_reassigned',
+			'order_packed',
+			'order_fulfilled',
+			'order_status_set_to_packed',
+			'order_status_set_to_fulfilled',
+		);
+		$event_types_sql = "'" . implode("','", array_map('esc_sql', $event_types)) . "'";
+		$rows = $wpdb->get_col(
+			"SELECT DISTINCT order_id
+			FROM {$table}
+			WHERE order_id IN ({$ids_sql})
+				AND event_type IN ({$event_types_sql})"
+		);
+
+		if (! is_array($rows)) {
+			return array();
+		}
+
+		return array_values(array_filter(array_map('absint', $rows)));
+	}
+
+	/**
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function getStatusTimelineByOrderId(int $order_id): array
