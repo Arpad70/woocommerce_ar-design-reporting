@@ -28,6 +28,11 @@ final class DashboardPage
 	private array $plugin_meta;
 
 	/**
+	 * @var array<int, string>
+	 */
+	private array $order_number_cache = array();
+
+	/**
 	 * @param array<string, string> $plugin_meta
 	 */
 	public function __construct(
@@ -185,7 +190,7 @@ final class DashboardPage
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Prehľad objednávok', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Zoznam zobrazuje všetky objednávky v zvolenom filtri vrátane stavu, zodpovednej osoby a poslednej zmeny statusu.', 'ar-design-reporting') . '</p>';
 		echo '<table class="widefat striped" style="max-width:1200px;">';
-		echo '<thead><tr><th>' . esc_html__('Order ID', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<thead><tr><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
 		if (empty($orders_overview)) {
@@ -200,7 +205,7 @@ final class DashboardPage
 				$ready_seconds = isset($order_row['ready_for_packing_seconds']) ? (int) $order_row['ready_for_packing_seconds'] : 0;
 
 				echo '<tr>';
-				echo '<td><a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html((string) $order_id) . '</a></td>';
+				echo '<td><a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html($this->resolveOrderNumberLabel($order_id)) . '</a></td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('status', (string) ($order_row['status'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('classification', (string) ($order_row['classification'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatUserLabel($manager_id)) . '</td>';
@@ -469,7 +474,7 @@ final class DashboardPage
 			echo '<p>' . esc_html__('Zatiaľ nebola zaznamenaná žiadna archivácia zmazanej objednávky.', 'ar-design-reporting') . '</p>';
 		} else {
 			echo '<table class="widefat striped" style="max-width:960px;">';
-			echo '<thead><tr><th>' . esc_html__('Order ID', 'ar-design-reporting') . '</th><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Snapshot', 'ar-design-reporting') . '</th></tr></thead>';
+			echo '<thead><tr><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Snapshot', 'ar-design-reporting') . '</th></tr></thead>';
 			echo '<tbody>';
 
 			foreach ($recent_deleted_archives as $archive) {
@@ -477,7 +482,8 @@ final class DashboardPage
 				$snapshot_json = wp_json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
 				echo '<tr>';
-				echo '<td>' . esc_html((string) ($archive['order_id'] ?? 0)) . '</td>';
+				$archived_order_id = (int) ($archive['order_id'] ?? 0);
+				echo '<td>' . esc_html($this->resolveOrderNumberLabel($archived_order_id)) . '</td>';
 				echo '<td>' . esc_html((string) ($archive['created_at_gmt'] ?? '')) . '</td>';
 				echo '<td>' . esc_html((string) ($archive['actor_user_id'] ?? '')) . '</td>';
 				echo '<td><details><summary>' . esc_html__('Zobraziť', 'ar-design-reporting') . '</summary><pre style="white-space:pre-wrap;max-width:640px;">' . esc_html(is_string($snapshot_json) ? $snapshot_json : '') . '</pre></details></td>';
@@ -881,6 +887,35 @@ final class DashboardPage
 		$label = '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login;
 
 		return $label . ' (#' . $user_id . ')';
+	}
+
+	private function resolveOrderNumberLabel(int $order_id): string
+	{
+		if ($order_id <= 0) {
+			return __('Nevyplněno', 'ar-design-reporting');
+		}
+
+		if (isset($this->order_number_cache[$order_id])) {
+			return $this->order_number_cache[$order_id];
+		}
+
+		$label = '#' . $order_id;
+
+		if (function_exists('wc_get_order')) {
+			$order = wc_get_order($order_id);
+
+			if ($order instanceof \WC_Order) {
+				$order_number = (string) $order->get_order_number();
+
+				if ('' !== $order_number && (string) $order_id !== $order_number) {
+					$label = '#' . $order_number . ' (ID ' . $order_id . ')';
+				}
+			}
+		}
+
+		$this->order_number_cache[$order_id] = $label;
+
+		return $label;
 	}
 
 	private function getOrderAdminUrl(int $order_id): string
