@@ -81,6 +81,23 @@ final class ProcessingService
 		$actor_user_id = get_current_user_id() ?: null;
 		$owner_user_id = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
 
+		if ($this->isCancelledRestoreTransition($canonical_from_status, $canonical_to_status) && ! $this->canRestoreCancelledStatus($actor_user_id)) {
+			$this->revertWooOrderStatus($order_id, $from_status);
+			$this->storeTransitionBlockedNotice($order_id, $canonical_from_status, $canonical_to_status, $actor_user_id ?? 0);
+			$this->audit_logger->log(
+				'order_cancelled_restore_not_allowed',
+				'order',
+				$order_id,
+				$order_id,
+				$actor_user_id,
+				array('status' => $canonical_from_status),
+				array('status' => $canonical_to_status),
+				array('source' => 'woocommerce_order_status_changed')
+			);
+
+			return;
+		}
+
 		if ($this->shouldBlockOwnerMismatch($actor_user_id, $owner_user_id)) {
 			$this->revertWooOrderStatus($order_id, $from_status);
 			$this->storeOwnerMismatchNotice($order_id, (int) $actor_user_id, $owner_user_id, $from_status, $to_status);
@@ -741,7 +758,7 @@ final class ProcessingService
 			'zabalena'     => array('vybavena', 'on-hold', 'cancelled'),
 			'vybavena'     => array('failed', 'refunded'),
 			'failed'       => array('on-hold', 'cancelled'),
-			'cancelled'    => array('refunded'),
+			'cancelled'    => array('pending', 'processing', 'on-hold', 'na-odoslanie', 'refunded'),
 		);
 
 		if (! isset($allowed[$from_status])) {
@@ -749,6 +766,55 @@ final class ProcessingService
 		}
 
 		return in_array($to_status, $allowed[$from_status], true);
+	}
+
+	private function isCancelledRestoreTransition(string $from_status, string $to_status): bool
+	{
+		$from_status = $this->normalizeStatus($from_status);
+		$to_status   = $this->normalizeStatus($to_status);
+
+		if ('cancelled' !== $from_status) {
+			return false;
+		}
+
+		return in_array($to_status, array('pending', 'processing', 'on-hold', 'na-odoslanie'), true);
+	}
+
+	private function canRestoreCancelledStatus(?int $actor_user_id): bool
+	{
+		if (null === $actor_user_id || $actor_user_id <= 0) {
+			return false;
+		}
+
+		if (! function_exists('get_user_by') || ! function_exists('user_can')) {
+			return false;
+		}
+
+		$user = get_user_by('id', $actor_user_id);
+
+		if (! $user instanceof \WP_User) {
+			return false;
+		}
+
+		if (user_can($user, 'manage_options') || user_can($user, 'manage_woocommerce')) {
+			return true;
+		}
+
+		$allowed_roles = (array) apply_filters(
+			'ard_reporting_cancelled_restore_roles',
+			array('administrator', 'shop_manager', 'owner', 'manager')
+		);
+		$user_roles = is_array($user->roles) ? $user->roles : array();
+
+		foreach ($allowed_roles as $allowed_role) {
+			$role = sanitize_key((string) $allowed_role);
+
+			if ('' !== $role && in_array($role, $user_roles, true)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function shouldBlockOwnerMismatch(?int $actor_user_id, int $owner_user_id): bool

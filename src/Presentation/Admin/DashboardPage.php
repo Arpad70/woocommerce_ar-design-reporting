@@ -711,6 +711,7 @@ final class DashboardPage
 			'order_status_set_to_fulfilled' => __('Nastavenie Woo stavu na Vybavená', 'ar-design-reporting'),
 			'order_status_applied_after_reassign' => __('Použitie zmeny stavu po zmene priradenia', 'ar-design-reporting'),
 			'order_status_transition_not_allowed' => __('Zablokovaný nepovolený prechod stavov', 'ar-design-reporting'),
+			'order_cancelled_restore_not_allowed' => __('Zamietnutá obnova zo Zrušená (bez oprávnenia)', 'ar-design-reporting'),
 			'order_action_blocked_owner_mismatch' => __('Zablokovaná akcia: objednávka priradená inému používateľovi', 'ar-design-reporting'),
 			'order_marked_cancelled'        => __('Označenie objednávky ako Zrušená', 'ar-design-reporting'),
 			'order_delete_attempt_blocked'  => __('Zablokovaný pokus o zmazanie/koš', 'ar-design-reporting'),
