@@ -60,8 +60,18 @@ final class DashboardPage
 
 		$export_status = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
 		$export_classification = isset($_GET['classification']) ? sanitize_key(wp_unslash($_GET['classification'])) : '';
-		$export_date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : '';
-		$export_date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : '';
+		$default_date_from = $this->getCurrentMonthStartDate();
+		$default_date_to = $this->getCurrentDateIso();
+		$export_date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : $default_date_from;
+		$export_date_to = isset($_GET['date_to']) ? sanitize_text_field(wp_unslash($_GET['date_to'])) : $default_date_to;
+
+		if ('' === trim($export_date_from)) {
+			$export_date_from = $default_date_from;
+		}
+
+		if ('' === trim($export_date_to)) {
+			$export_date_to = $default_date_to;
+		}
 		$dashboard_filters = $this->export_manager->normalizeFilters(
 			array(
 				'status'         => $export_status,
@@ -961,5 +971,19 @@ final class DashboardPage
 			),
 			admin_url('post.php')
 		);
+	}
+
+	private function getCurrentMonthStartDate(): string
+	{
+		$timestamp = current_time('timestamp');
+
+		return gmdate('Y-m-01', (int) $timestamp);
+	}
+
+	private function getCurrentDateIso(): string
+	{
+		$timestamp = current_time('timestamp');
+
+		return gmdate('Y-m-d', (int) $timestamp);
 	}
 }

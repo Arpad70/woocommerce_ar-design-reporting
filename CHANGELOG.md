@@ -1,5 +1,11 @@
 # Changelog
 
+
+## 0.3.5 - 2026-04-24
+
+- dashboard filtry mají nově výchozí období od začátku aktuálního měsíce do dnešního dne
+- Přehled výkonu se po otevření dashboardu načte automaticky pro aktuální kalendářní měsíc
+
 ## 0.3.4 - 2026-04-24
 
 - KPI Snapshot: `Objednávky započítané do KPI` nyní zahrnují pouze objednávky s auditovatelnou workflow stopou
