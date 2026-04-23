@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 - 2026-04-23
+
+- obnova objednávky ze stavu `Zrušená` do aktivních workflow stavů je nově povolena pouze oprávněným rolím (`manager/shop_manager`, `owner`, `admin`)
+- neoprávněný pokus o obnovu je zablokován, stav objednávky se vrátí a událost se zapíše do auditu (`order_cancelled_restore_not_allowed`)
+
 ## 0.3.1 - 2026-04-23
 
 - reporting dashboard nyní zobrazuje obchodní číslo objednávky i interní ID (`#číslo (ID xxx)`), aby nedocházelo k záměně
