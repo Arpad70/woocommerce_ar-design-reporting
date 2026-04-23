@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArDesign\Reporting\Presentation\Admin;
 
+use ArDesign\Reporting\Application\Requirements;
 use ArDesign\Reporting\Application\Emails\EmailReporter;
 use ArDesign\Reporting\Application\Exports\ExportManager;
 use ArDesign\Reporting\Application\Reports\DashboardQueryService;
@@ -136,8 +137,22 @@ final class DashboardPage
 
 		echo '<table class="widefat striped" style="max-width:960px;margin-top:16px;">';
 		echo '<tbody>';
+		$wp_694_compatible = version_compare('6.9.4', Requirements::MIN_WORDPRESS_VERSION, '>=');
 		echo '<tr><th style="width:260px;">' . esc_html__('Verzia pluginu', 'ar-design-reporting') . '</th><td>' . esc_html((string) $this->plugin_meta['version']) . '</td></tr>';
 		echo '<tr><th>' . esc_html__('DB verzia', 'ar-design-reporting') . '</th><td>' . esc_html((string) get_option('ard_reporting_db_version', 'n/a')) . '</td></tr>';
+		echo '<tr><th>' . esc_html__('Kompatibilita s WordPress 6.9.4', 'ar-design-reporting') . '</th><td>' . esc_html(
+			$wp_694_compatible
+				? sprintf(
+					/* translators: %s: minimum supported WordPress version */
+					__('Áno (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
+					Requirements::MIN_WORDPRESS_VERSION
+				)
+				: sprintf(
+					/* translators: %s: minimum supported WordPress version */
+					__('Nie (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
+					Requirements::MIN_WORDPRESS_VERSION
+				)
+		) . '</td></tr>';
 		echo '<tr><th>' . esc_html__('HPOS režim', 'ar-design-reporting') . '</th><td>' . esc_html(! empty($data['hpos_enabled']) ? __('aktivní', 'ar-design-reporting') : __('neaktivní', 'ar-design-reporting')) . '</td></tr>';
 		echo '<tr><th>' . esc_html__('Migrace', 'ar-design-reporting') . '</th><td>' . esc_html(empty($missing) ? __('v pořádku', 'ar-design-reporting') : __('chybí některé tabulky', 'ar-design-reporting')) . '</td></tr>';
 		echo '</tbody>';

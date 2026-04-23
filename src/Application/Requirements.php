@@ -6,6 +6,8 @@ namespace ArDesign\Reporting\Application;
 
 final class Requirements
 {
+	public const MIN_WORDPRESS_VERSION = '6.7';
+
 	public function hasWooCommerce(): bool
 	{
 		return class_exists('WooCommerce');
@@ -20,7 +22,7 @@ final class Requirements
 	{
 		global $wp_version;
 
-		return isset($wp_version) && version_compare((string) $wp_version, '6.7', '>=');
+		return isset($wp_version) && version_compare((string) $wp_version, self::MIN_WORDPRESS_VERSION, '>=');
 	}
 
 	public function canBoot(): bool
@@ -35,7 +37,11 @@ final class Requirements
 		}
 
 		if (! $this->hasSupportedWordPressVersion()) {
-			return __('Plugin AR Design Reporting vyžaduje WordPress 6.7 nebo novější.', 'ar-design-reporting');
+			return sprintf(
+				/* translators: %s: minimum WordPress version */
+				__('Plugin AR Design Reporting vyžaduje WordPress %s nebo novější.', 'ar-design-reporting'),
+				self::MIN_WORDPRESS_VERSION
+			);
 		}
 
 		if (! $this->hasWooCommerce()) {
