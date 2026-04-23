@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 - 2026-04-24
+
+- KPI Snapshot: `Počet objednávek` je nyní skutečný celkový počet WooCommerce objednávek za období ve filtru
+- KPI Snapshot: `Objednávky započítané do KPI` nyní počítají objednávky, které přispívají do jakékoli KPI metriky
+
 ## 0.3.2 - 2026-04-23
 
 - obnova objednávky ze stavu `Zrušená` do aktivních workflow stavů je nově povolena pouze oprávněným rolím (`manager/shop_manager`, `owner`, `admin`)

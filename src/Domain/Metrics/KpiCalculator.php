@@ -29,14 +29,16 @@ final class KpiCalculator
 	public function getOverview(array $filters = array(), float $manager_ready_avg_seconds = 0.0, float $overall_ready_avg_seconds = 0.0): array
 	{
 		$processing_counters = $this->order_processing_repository->getOverviewCounters($filters);
+		$order_ids = $this->getOrderIdsForKpiScope($filters);
+		$scope_counters = $this->getKpiScopeCounters($order_ids);
 		$avg_processing_seconds = $this->order_processing_repository->getAverageProcessingSeconds($filters);
 		$orders_per_employee = $this->order_processing_repository->getAverageOrdersPerEmployee($filters);
 		$audit_events        = $this->audit_log_repository->countAll();
-		$financials          = $this->getFinancialKpis($filters);
+		$financials          = $this->getFinancialKpis($order_ids);
 
 		return array(
-			'total_orders'           => (int) ( $processing_counters['total_orders'] ?? 0 ),
-			'kpi_orders'             => (int) ( $processing_counters['kpi_orders'] ?? 0 ),
+			'total_orders'           => (int) ( $scope_counters['total_orders'] ?? 0 ),
+			'kpi_orders'             => (int) ( $scope_counters['kpi_orders'] ?? 0 ),
 			'completed'              => (int) ( $processing_counters['completed'] ?? 0 ),
 			'audit_events'           => $audit_events,
 			'gross_revenue'          => (float) ( $financials['gross_revenue'] ?? 0.0 ),
@@ -51,12 +53,12 @@ final class KpiCalculator
 	}
 
 	/**
-	 * @param array<string, string> $filters
+	 * @param array<int, int> $order_ids
 	 * @return array<string, int|float>
 	 */
-	private function getFinancialKpis(array $filters = array()): array
+	private function getFinancialKpis(array $order_ids = array()): array
 	{
-		if (! function_exists('wc_get_orders') || ! function_exists('wc_get_order_statuses')) {
+		if (! function_exists('wc_get_order')) {
 			return array(
 				'gross_revenue'       => 0.0,
 				'cancelled_orders'    => 0,
@@ -64,19 +66,6 @@ final class KpiCalculator
 				'average_order_value' => 0.0,
 			);
 		}
-
-		$args = array(
-			'limit'  => -1,
-			'return' => 'ids',
-			'status' => array_keys(wc_get_order_statuses()),
-		);
-
-		$date_query = $this->buildDateCreatedFilter($filters);
-		if ('' !== $date_query) {
-			$args['date_created'] = $date_query;
-		}
-
-		$order_ids = wc_get_orders($args);
 
 		if (! is_array($order_ids) || empty($order_ids)) {
 			return array(
@@ -124,23 +113,83 @@ final class KpiCalculator
 	/**
 	 * @param array<string, string> $filters
 	 */
-	private function buildDateCreatedFilter(array $filters): string
+	private function getOrderIdsForKpiScope(array $filters): array
 	{
+		if (! function_exists('wc_get_orders') || ! function_exists('wc_get_order_statuses')) {
+			return array();
+		}
+
+		$args = array(
+			'limit'  => -1,
+			'return' => 'ids',
+			'status' => array_keys(wc_get_order_statuses()),
+		);
+
 		$from = (string) ($filters['date_from'] ?? '');
 		$to   = (string) ($filters['date_to'] ?? '');
 
 		if ('' !== $from && '' !== $to) {
-			return $from . '...' . $to . ' 23:59:59';
+			$args['date_created'] = $from . '...' . $to . ' 23:59:59';
+		} elseif ('' !== $from) {
+			$args['date_created'] = '>=' . $from;
+		} elseif ('' !== $to) {
+			$args['date_created'] = '<=' . $to . ' 23:59:59';
 		}
 
-		if ('' !== $from) {
-			return '>=' . $from;
+		$order_ids = wc_get_orders($args);
+
+		return is_array($order_ids) ? array_values(array_map('absint', $order_ids)) : array();
+	}
+
+	/**
+	 * @param array<int, int> $order_ids
+	 * @return array<string, int>
+	 */
+	private function getKpiScopeCounters(array $order_ids): array
+	{
+		if (! function_exists('wc_get_order')) {
+			return array(
+				'total_orders' => 0,
+				'kpi_orders'   => 0,
+			);
 		}
 
-		if ('' !== $to) {
-			return '<=' . $to . ' 23:59:59';
+		$total_orders = count($order_ids);
+		$kpi_orders = 0;
+
+		foreach ($order_ids as $order_id) {
+			$order = wc_get_order((int) $order_id);
+
+			if (! $order instanceof \WC_Order) {
+				continue;
+			}
+
+			if ($this->orderHasAnyKpiMetric($order)) {
+				$kpi_orders++;
+			}
 		}
 
-		return '';
+		return array(
+			'total_orders' => $total_orders,
+			'kpi_orders'   => $kpi_orders,
+		);
+	}
+
+	private function orderHasAnyKpiMetric(\WC_Order $order): bool
+	{
+		$status   = sanitize_key((string) $order->get_status());
+		$total    = (float) $order->get_total();
+		$refunded = (float) $order->get_total_refunded();
+
+		// Každá objednávka se promítá alespoň do některé KPI (obrat / storna / netto / AOV).
+		if (in_array($status, array('cancelled', 'failed'), true)) {
+			return true;
+		}
+
+		if (0.0 !== $total || $refunded > 0.0) {
+			return true;
+		}
+
+		return false;
 	}
 }
