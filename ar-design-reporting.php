@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ar Design Reporting
  * Description: HPOS-first admin reporting plugin pro WooCommerce pro ar-design.sk.
- * Version: 0.3.5
+ * Version: 0.3.6
  * Author: Arpád Horák
  * Update URI: https://github.com/Arpad70/woocommerce_ar-design-reporting
  * Requires at least: 6.7
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ARD_REPORTING_VERSION', '0.3.5' );
+define( 'ARD_REPORTING_VERSION', '0.3.6' );
 define( 'ARD_REPORTING_DB_VERSION', '0.3.5' );
 define( 'ARD_REPORTING_FILE', __FILE__ );
 define( 'ARD_REPORTING_BASENAME', plugin_basename( __FILE__ ) );

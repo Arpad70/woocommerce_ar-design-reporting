@@ -214,7 +214,8 @@ final class DashboardPage
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Prehľad objednávok', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Zoznam zobrazuje všetky objednávky v zvolenom filtri vrátane stavu, zodpovednej osoby a poslednej zmeny statusu.', 'ar-design-reporting') . '</p>';
-		echo '<table class="widefat striped" style="max-width:1200px;">';
+		echo '<div class="ard-orders-overview-wrap">';
+		echo '<table id="ard-orders-overview-table" class="widefat striped ard-orders-overview-table" style="max-width:1200px;">';
 		echo '<thead><tr><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Manažér', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
@@ -229,7 +230,7 @@ final class DashboardPage
 				$processing_seconds = isset($order_row['processing_seconds']) ? (int) $order_row['processing_seconds'] : 0;
 				$ready_seconds = isset($order_row['ready_for_packing_seconds']) ? (int) $order_row['ready_for_packing_seconds'] : 0;
 
-				echo '<tr>';
+				echo '<tr class="ard-orders-overview-row">';
 				echo '<td><a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html($this->resolveOrderNumberLabel($order_id)) . '</a></td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('status', (string) ($order_row['status'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('classification', (string) ($order_row['classification'] ?? ''))) . '</td>';
@@ -244,6 +245,20 @@ final class DashboardPage
 
 		echo '</tbody>';
 		echo '</table>';
+		echo '</div>';
+		echo '<div class="ard-orders-overview-pagination" aria-label="' . esc_attr__('Stránkovanie prehľadu objednávok', 'ar-design-reporting') . '">';
+		echo '<button type="button" class="button" data-page-action="prev">' . esc_html__('Predchádzajúca', 'ar-design-reporting') . '</button>';
+		echo '<span class="ard-orders-overview-page-info" data-page-info></span>';
+		echo '<button type="button" class="button" data-page-action="next">' . esc_html__('Ďalšia', 'ar-design-reporting') . '</button>';
+		echo '<label class="ard-orders-overview-page-size">';
+		echo '<span>' . esc_html__('Na stránku', 'ar-design-reporting') . ':</span>';
+		echo '<select data-page-size>';
+		echo '<option value="10" selected>10</option>';
+		echo '<option value="20">20</option>';
+		echo '<option value="50">50</option>';
+		echo '</select>';
+		echo '</label>';
+		echo '</div>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Výkon manažéra (zahájenie workflow)', 'ar-design-reporting') . '</h2>';
 		echo '<table class="widefat striped" style="max-width:960px;">';
@@ -574,10 +589,32 @@ final class DashboardPage
 		.ard-subsection:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 		.ard-subsection h3 { margin-top: 0; margin-bottom: 8px; font-size: 14px; color: #1f2937; text-transform: uppercase; letter-spacing: .04em; }
 		.ard-reporting-dashboard > h2 { display: none; }
+		.ard-orders-overview-wrap { max-width: 100%; overflow-x: auto; border-radius: 12px; }
+		.ard-orders-overview-table { width: 100%; min-width: 980px; table-layout: fixed; font-size: 13px; }
+		.ard-orders-overview-table td,
+		.ard-orders-overview-table th {
+			white-space: normal;
+			overflow-wrap: anywhere;
+			word-break: break-word;
+			line-height: 1.35;
+		}
+		.ard-orders-overview-pagination {
+			display: flex;
+			gap: 10px;
+			align-items: center;
+			justify-content: flex-end;
+			margin-top: 10px;
+			flex-wrap: wrap;
+		}
+		.ard-orders-overview-page-info { color: #475569; font-size: 12px; min-width: 160px; text-align: center; }
+		.ard-orders-overview-page-size { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 12px; }
+		.ard-orders-overview-page-size select { min-height: 30px; }
 		@media (max-width: 900px) {
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
 			.ard-kpi-value { font-size: 20px; }
+			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
+			.ard-orders-overview-pagination { justify-content: flex-start; }
 		}
 		</style>';
 	}
@@ -592,8 +629,92 @@ final class DashboardPage
 			}
 			root.dataset.layoutApplied = "1";
 
+			function initOrdersOverviewPagination() {
+				var table = root.querySelector("#ard-orders-overview-table");
+				var pagination = root.querySelector(".ard-orders-overview-pagination");
+				if (!table || !pagination) {
+					return;
+				}
+
+				var tbody = table.querySelector("tbody");
+				if (!tbody) {
+					return;
+				}
+
+				var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.ard-orders-overview-row"));
+				var prevBtn = pagination.querySelector("[data-page-action=\"prev\"]");
+				var nextBtn = pagination.querySelector("[data-page-action=\"next\"]");
+				var pageInfo = pagination.querySelector("[data-page-info]");
+				var pageSizeSelect = pagination.querySelector("[data-page-size]");
+				var currentPage = 1;
+
+				if (!rows.length) {
+					pagination.style.display = "none";
+					return;
+				}
+
+				function renderPage() {
+					var pageSize = parseInt(pageSizeSelect.value || "10", 10);
+					if (!pageSize || pageSize < 1) {
+						pageSize = 10;
+					}
+
+					var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+					if (currentPage > totalPages) {
+						currentPage = totalPages;
+					}
+
+					var start = (currentPage - 1) * pageSize;
+					var end = start + pageSize;
+
+					rows.forEach(function (row, index) {
+						row.style.display = index >= start && index < end ? "" : "none";
+					});
+
+					if (pageInfo) {
+						pageInfo.textContent = "Strana " + currentPage + " / " + totalPages + " (" + rows.length + " objednávok)";
+					}
+					if (prevBtn) {
+						prevBtn.disabled = currentPage <= 1;
+					}
+					if (nextBtn) {
+						nextBtn.disabled = currentPage >= totalPages;
+					}
+				}
+
+				if (prevBtn) {
+					prevBtn.addEventListener("click", function () {
+						if (currentPage > 1) {
+							currentPage -= 1;
+							renderPage();
+						}
+					});
+				}
+
+				if (nextBtn) {
+					nextBtn.addEventListener("click", function () {
+						var pageSize = parseInt(pageSizeSelect.value || "10", 10) || 10;
+						var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+						if (currentPage < totalPages) {
+							currentPage += 1;
+							renderPage();
+						}
+					});
+				}
+
+				if (pageSizeSelect) {
+					pageSizeSelect.addEventListener("change", function () {
+						currentPage = 1;
+						renderPage();
+					});
+				}
+
+				renderPage();
+			}
+
 			var headings = Array.prototype.slice.call(root.querySelectorAll(":scope > h2"));
 			if (!headings.length) {
+				initOrdersOverviewPagination();
 				return;
 			}
 
@@ -667,6 +788,7 @@ final class DashboardPage
 			});
 
 			root.appendChild(grid);
+			initOrdersOverviewPagination();
 		});
 		</script>';
 	}

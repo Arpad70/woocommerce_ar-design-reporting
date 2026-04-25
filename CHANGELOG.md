@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.6 - 2026-04-25
+
+- sekce `Prehľad objednávok` má upravený layout tabulky (menší text, zalamování a responsivní wrapper), aby obsah nepřetékal
+- přidán paginator pro `Prehľad objednávok` s ovládáním předchozí/další stránka
+- výchozí počet řádků na stránku je nastaven na 10
+
+
 
 ## 0.3.5 - 2026-04-24
 
