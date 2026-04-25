@@ -695,13 +695,13 @@ final class DashboardPage
 			overflow: hidden;
 			text-overflow: ellipsis;
 		}
-		.ard-kpi-value { font-size: 36px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+		.ard-kpi-value { font-size: 30px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
 		.ard-kpi-delta {
 			position: absolute;
 			right: 14px;
 			bottom: 12px;
 			z-index: 2;
-			font-size: 32px;
+			font-size: 26px;
 			line-height: 1;
 			font-weight: 700;
 			white-space: nowrap;
@@ -746,8 +746,8 @@ final class DashboardPage
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
 			.ard-kpi-grid { grid-template-columns: 1fr; }
-			.ard-kpi-value { font-size: 28px; }
-			.ard-kpi-delta { right: 10px; bottom: 10px; font-size: 22px; }
+			.ard-kpi-value { font-size: 24px; }
+			.ard-kpi-delta { right: 10px; bottom: 10px; font-size: 19px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
 		}

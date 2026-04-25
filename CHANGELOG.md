@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.12 - 2026-04-25
+
+- KPI karta: zmenšené písmo hodnoty (`ard-kpi-value`) a zmenšené písmo delty (`ard-kpi-delta`) pre proporčne čistejší vzhľad
+- doladené aj mobilné veľkosti týchto prvkov
+
+
 ## 0.3.11 - 2026-04-25
 
 - opravené kotvenie `ard-kpi-delta` do pravého dolného rohu celej KPI karty (nie do horného riadku)
