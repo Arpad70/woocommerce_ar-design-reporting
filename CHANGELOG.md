@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7 - 2026-04-25
+
+- release obnovuje kontinuitu automatických aktualizací ve WordPressu po nasazení změn dashboardu
+- přehled objednávek: menší text, zalamování obsahu a paginator (výchozí 10 řádků)
+
 ## 0.3.6 - 2026-04-25
 
 - sekce `Prehľad objednávok` má upravený layout tabulky (menší text, zalamování a responsivní wrapper), aby obsah nepřetékal
