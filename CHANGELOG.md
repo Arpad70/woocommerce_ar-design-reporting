@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11 - 2026-04-25
+
+- opravené kotvenie `ard-kpi-delta` do pravého dolného rohu celej KPI karty (nie do horného riadku)
+- upravené spacing/šírky, aby delta a hodnota neboli v kolízii pri dlhších číslach
+
+
 ## 0.3.10 - 2026-04-25
 
 - KPI delta je zarovnaná do pravého dolného rohu diagonálnej časti karty

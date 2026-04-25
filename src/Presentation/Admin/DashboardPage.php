@@ -651,7 +651,7 @@ final class DashboardPage
 			background: #f8fafc;
 			border: 1px solid #dbe6f3;
 			border-radius: 12px;
-			padding: 16px 18px 14px 18px;
+			padding: 16px 18px 18px 18px;
 			box-shadow: 0 1px 2px rgba(16,24,40,.05);
 			min-height: 108px;
 		}
@@ -680,7 +680,7 @@ final class DashboardPage
 			);
 			pointer-events: none;
 		}
-		.ard-kpi-card-top { position: relative; z-index: 1; display: block; margin-bottom: 10px; }
+		.ard-kpi-card-top { position: static; z-index: 1; display: block; margin-bottom: 10px; }
 		.ard-kpi-label {
 			position: relative;
 			z-index: 1;
@@ -707,6 +707,7 @@ final class DashboardPage
 			white-space: nowrap;
 			text-align: right;
 		}
+		.ard-kpi-card .ard-kpi-value { max-width: 52%; }
 		.ard-kpi-card.is-up { --ard-kpi-accent-bg: rgba(16, 185, 129, 0.16); }
 		.ard-kpi-card.is-down { --ard-kpi-accent-bg: rgba(236, 72, 153, 0.13); }
 		.ard-kpi-card.is-neutral { --ard-kpi-accent-bg: rgba(148, 163, 184, 0.12); }
