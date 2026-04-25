@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -24,6 +26,33 @@ jobs:
 
       - name: Verify Version Consistency
         run: php scripts/verify-version-consistency.php
+
+      - name: Enforce Release Discipline
+        run: |
+          BASE_REF="${{ github.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            echo "Base ref missing, skipping release discipline check."
+            exit 0
+          fi
+
+          git fetch origin "$BASE_REF" --depth=1
+          CHANGED_FILES="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          if echo "$CHANGED_FILES" | grep -E -q '^(src/|ar-design-reporting\.php$)'; then
+            if ! echo "$CHANGED_FILES" | grep -q '^VERSION$'; then
+              echo "ERROR: Runtime plugin changes detected, but VERSION was not updated."
+              exit 1
+            fi
+            if ! echo "$CHANGED_FILES" | grep -q '^CHANGELOG\.md$'; then
+              echo "ERROR: Runtime plugin changes detected, but CHANGELOG.md was not updated."
+              exit 1
+            fi
+          fi
+
+          echo "Release discipline check passed."
 
       - name: Integration Tests
         run: php tests/run-integration-tests.php
