@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.13 - 2026-04-25
+
+- hláška porovnávacieho obdobia v KPI snapshote zobrazuje dátumy v českom formáte (dd.mm.rrrr)
+
+
 ## 0.3.12 - 2026-04-25
 
 - KPI karta: zmenšené písmo hodnoty (`ard-kpi-value`) a zmenšené písmo delty (`ard-kpi-delta`) pre proporčne čistejší vzhľad

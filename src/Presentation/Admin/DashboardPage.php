@@ -592,12 +592,15 @@ final class DashboardPage
 			'cancelled_orders',
 		);
 
+		$compare_from_label = $this->formatIsoDateForCzechDisplay($compare_date_from);
+		$compare_to_label = $this->formatIsoDateForCzechDisplay($compare_date_to);
+
 		echo '<div class="ard-kpi-compare-info">' . esc_html(
 			sprintf(
 				/* translators: 1: compare from date, 2: compare to date */
 				__('Porovnanie voči obdobiu %1$s až %2$s', 'ar-design-reporting'),
-				$compare_date_from,
-				$compare_date_to
+				$compare_from_label,
+				$compare_to_label
 			)
 		) . '</div>';
 		echo '<div class="ard-kpi-grid">';
@@ -608,6 +611,7 @@ final class DashboardPage
 			}
 
 			$value = $kpis[$key];
+			$kpi_label = $this->getKpiLabel((string) $key);
 			$comparison = $kpi_compare[$key] ?? array();
 			$delta_percent = isset($comparison['delta_percent']) ? (float) $comparison['delta_percent'] : 0.0;
 			$delta_class = $delta_percent > 0 ? 'is-up' : ($delta_percent < 0 ? 'is-down' : 'is-neutral');
@@ -620,7 +624,7 @@ final class DashboardPage
 			echo '<div class="ard-kpi-value">' . esc_html($this->formatKpiValue((string) $key, $value)) . '</div>';
 			echo '<div class="ard-kpi-delta">' . esc_html($delta_arrow . ' ' . $delta_prefix . number_format($delta_percent, 2, ',', ' ') . ' %') . '</div>';
 			echo '</div>';
-			echo '<div class="ard-kpi-label">' . esc_html($this->getKpiLabel((string) $key)) . '</div>';
+			echo '<div class="ard-kpi-label" title="' . esc_attr($kpi_label) . '" aria-label="' . esc_attr($kpi_label) . '">' . esc_html($kpi_label) . '</div>';
 			echo '</div>';
 		}
 
@@ -1281,5 +1285,21 @@ final class DashboardPage
 		}
 
 		return $shifted->format('Y-m-d');
+	}
+
+	private function formatIsoDateForCzechDisplay(string $date): string
+	{
+		$date = trim($date);
+
+		if ('' === $date) {
+			return $date;
+		}
+
+		$parsed = \DateTimeImmutable::createFromFormat('Y-m-d', $date, new \DateTimeZone('UTC'));
+		if (! $parsed instanceof \DateTimeImmutable) {
+			return $date;
+		}
+
+		return $parsed->format('d.m.Y');
 	}
 }
