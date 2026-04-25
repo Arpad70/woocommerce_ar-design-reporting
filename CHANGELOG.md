@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.9 - 2026-04-25
+
+- KPI karty upravené do vizuálu podľa referencie: diagonálne rozdelenie, farebné pozadie a výrazná delta hodnota
+- vylepšený business layout pre lepšiu čitateľnosť trendu priamo v dashboarde
+
+
 ## 0.3.8 - 2026-04-25
 
 - dashboard KPI rozšírené o segmenty: celkové/vybavené/čakajúce objednávky, obraty a priemerné hodnoty objednávok

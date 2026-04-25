@@ -615,6 +615,7 @@ final class DashboardPage
 			$delta_arrow = $delta_percent > 0 ? '↑' : ($delta_percent < 0 ? '↓' : '→');
 
 			echo '<div class="ard-kpi-card ' . esc_attr($delta_class) . '">';
+			echo '<span class="ard-kpi-split" aria-hidden="true"></span>';
 			echo '<div class="ard-kpi-card-top">';
 			echo '<div class="ard-kpi-value">' . esc_html($this->formatKpiValue((string) $key, $value)) . '</div>';
 			echo '<div class="ard-kpi-delta">' . esc_html($delta_arrow . ' ' . $delta_prefix . number_format($delta_percent, 2, ',', ' ') . ' %') . '</div>';
@@ -643,15 +644,52 @@ final class DashboardPage
 		.ard-reporting-dashboard input[type="email"],
 		.ard-reporting-dashboard select { min-height: 36px; border-radius: 8px; border-color: #cbd5e1; }
 		.ard-kpi-compare-info { margin: 0 0 10px 2px; color: #64748b; font-size: 12px; }
-		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
-		.ard-kpi-card { background: linear-gradient(130deg, #ffffff 0%, #f8fafc 55%, #f1f5f9 100%); border: 1px solid #dbe6f3; border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
-		.ard-kpi-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
-		.ard-kpi-label { font-size: 12px; font-weight: 600; color: #52617a; margin: 0; }
-		.ard-kpi-value { font-size: 34px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
-		.ard-kpi-delta { font-size: 28px; line-height: 1; font-weight: 700; white-space: nowrap; }
+		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
+		.ard-kpi-card {
+			position: relative;
+			overflow: hidden;
+			background: #f8fafc;
+			border: 1px solid #dbe6f3;
+			border-radius: 12px;
+			padding: 16px 18px 14px 18px;
+			box-shadow: 0 1px 2px rgba(16,24,40,.05);
+			min-height: 108px;
+		}
+		.ard-kpi-split {
+			position: absolute;
+			inset: 0;
+			z-index: 0;
+			background: linear-gradient(
+				140deg,
+				transparent 0%,
+				transparent 52%,
+				var(--ard-kpi-accent-bg, rgba(148, 163, 184, 0.12)) 52%,
+				var(--ard-kpi-accent-bg, rgba(148, 163, 184, 0.12)) 100%
+			);
+		}
+		.ard-kpi-card::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			z-index: 0;
+			background: linear-gradient(
+				140deg,
+				transparent calc(52% - 1px),
+				rgba(255,255,255,0.95) 52%,
+				transparent calc(52% + 1px)
+			);
+			pointer-events: none;
+		}
+		.ard-kpi-card-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+		.ard-kpi-label { position: relative; z-index: 1; font-size: 11px; font-weight: 700; color: #5b6778; margin: 0; letter-spacing: .01em; }
+		.ard-kpi-value { font-size: 36px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+		.ard-kpi-delta { font-size: 32px; line-height: 1; font-weight: 700; white-space: nowrap; margin-top: 2px; }
+		.ard-kpi-card.is-up { --ard-kpi-accent-bg: rgba(16, 185, 129, 0.16); }
+		.ard-kpi-card.is-down { --ard-kpi-accent-bg: rgba(236, 72, 153, 0.13); }
+		.ard-kpi-card.is-neutral { --ard-kpi-accent-bg: rgba(148, 163, 184, 0.12); }
 		.ard-kpi-card.is-up .ard-kpi-delta { color: #16a34a; }
-		.ard-kpi-card.is-down .ard-kpi-delta { color: #dc2626; }
-		.ard-kpi-card.is-neutral .ard-kpi-delta { color: #64748b; }
+		.ard-kpi-card.is-down .ard-kpi-delta { color: #db2777; }
+		.ard-kpi-card.is-neutral .ard-kpi-delta { color: #22c55e; }
 		.ard-pro-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr); gap: 16px; margin-top: 18px; align-items: start; }
 		.ard-panel { background: #fff; border: 1px solid #d9e0e7; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
 		.ard-panel + .ard-panel { margin-top: 0; }
@@ -683,8 +721,9 @@ final class DashboardPage
 		@media (max-width: 900px) {
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
-			.ard-kpi-value { font-size: 26px; }
-			.ard-kpi-delta { font-size: 20px; }
+			.ard-kpi-grid { grid-template-columns: 1fr; }
+			.ard-kpi-value { font-size: 28px; }
+			.ard-kpi-delta { font-size: 22px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
 		}
