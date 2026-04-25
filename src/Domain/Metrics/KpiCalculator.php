@@ -40,11 +40,17 @@ final class KpiCalculator
 			'total_orders'           => (int) ( $scope_counters['total_orders'] ?? 0 ),
 			'kpi_orders'             => (int) ( $scope_counters['kpi_orders'] ?? 0 ),
 			'completed'              => (int) ( $processing_counters['completed'] ?? 0 ),
+			'completed_orders'       => (int) ( $financials['completed_orders'] ?? 0 ),
+			'pending_orders'         => (int) ( $financials['pending_orders'] ?? 0 ),
 			'audit_events'           => $audit_events,
 			'gross_revenue'          => (float) ( $financials['gross_revenue'] ?? 0.0 ),
+			'revenue_completed'      => (float) ( $financials['revenue_completed'] ?? 0.0 ),
+			'revenue_pending'        => (float) ( $financials['revenue_pending'] ?? 0.0 ),
 			'cancelled_orders'       => (int) ( $financials['cancelled_orders'] ?? 0 ),
 			'net_revenue'            => (float) ( $financials['net_revenue'] ?? 0.0 ),
 			'average_order_value'    => (float) ( $financials['average_order_value'] ?? 0.0 ),
+			'average_order_value_completed' => (float) ( $financials['average_order_value_completed'] ?? 0.0 ),
+			'average_order_value_pending' => (float) ( $financials['average_order_value_pending'] ?? 0.0 ),
 			'avg_processing_hours'   => $avg_processing_seconds > 0 ? round( $avg_processing_seconds / 3600, 2 ) : 0.0,
 			'orders_per_employee'    => $orders_per_employee > 0 ? round( $orders_per_employee, 2 ) : 0.0,
 			'avg_ready_for_packing_hours' => $overall_ready_avg_seconds > 0 ? round($overall_ready_avg_seconds / 3600, 2) : 0.0,
@@ -61,18 +67,30 @@ final class KpiCalculator
 		if (! function_exists('wc_get_order')) {
 			return array(
 				'gross_revenue'       => 0.0,
+				'revenue_completed'   => 0.0,
+				'revenue_pending'     => 0.0,
 				'cancelled_orders'    => 0,
+				'completed_orders'    => 0,
+				'pending_orders'      => 0,
 				'net_revenue'         => 0.0,
 				'average_order_value' => 0.0,
+				'average_order_value_completed' => 0.0,
+				'average_order_value_pending' => 0.0,
 			);
 		}
 
 		if (! is_array($order_ids) || empty($order_ids)) {
 			return array(
 				'gross_revenue'       => 0.0,
+				'revenue_completed'   => 0.0,
+				'revenue_pending'     => 0.0,
 				'cancelled_orders'    => 0,
+				'completed_orders'    => 0,
+				'pending_orders'      => 0,
 				'net_revenue'         => 0.0,
 				'average_order_value' => 0.0,
+				'average_order_value_completed' => 0.0,
+				'average_order_value_pending' => 0.0,
 			);
 		}
 
@@ -80,6 +98,12 @@ final class KpiCalculator
 		$net = 0.0;
 		$cancelled = 0;
 		$count_for_average = 0;
+		$completed_orders = 0;
+		$pending_orders = 0;
+		$revenue_completed = 0.0;
+		$revenue_pending = 0.0;
+		$completed_for_average = 0;
+		$pending_for_average = 0;
 
 		foreach ($order_ids as $order_id) {
 			$order = wc_get_order((int) $order_id);
@@ -93,20 +117,66 @@ final class KpiCalculator
 
 			$gross += $total;
 
-			if (in_array($status, array('cancelled', 'failed'), true)) {
+			if ($this->isCancelledLikeStatus($status)) {
 				$cancelled++;
+			}
+
+			$net_amount = max(0.0, $total - $refunded);
+
+			if (! $this->isExcludedFromRevenueStatus($status)) {
+				$net += $net_amount;
+				$count_for_average++;
+			}
+
+			if ($this->isCompletedLikeStatus($status)) {
+				$completed_orders++;
+				$revenue_completed += $net_amount;
+				$completed_for_average++;
 				continue;
 			}
 
-			$net += max(0.0, $total - $refunded);
-			$count_for_average++;
+			if (! $this->isTerminalNonPendingStatus($status)) {
+				$pending_orders++;
+				$revenue_pending += $net_amount;
+				$pending_for_average++;
+			}
 		}
 
 		return array(
 			'gross_revenue'       => round($gross, 2),
+			'revenue_completed'   => round($revenue_completed, 2),
+			'revenue_pending'     => round($revenue_pending, 2),
 			'cancelled_orders'    => $cancelled,
+			'completed_orders'    => $completed_orders,
+			'pending_orders'      => $pending_orders,
 			'net_revenue'         => round($net, 2),
 			'average_order_value' => $count_for_average > 0 ? round($net / $count_for_average, 2) : 0.0,
+			'average_order_value_completed' => $completed_for_average > 0 ? round($revenue_completed / $completed_for_average, 2) : 0.0,
+			'average_order_value_pending' => $pending_for_average > 0 ? round($revenue_pending / $pending_for_average, 2) : 0.0,
+		);
+	}
+
+	private function isCompletedLikeStatus(string $status): bool
+	{
+		return in_array($status, array('vybavena', 'completed'), true);
+	}
+
+	private function isCancelledLikeStatus(string $status): bool
+	{
+		return in_array($status, array('cancelled', 'zrusena'), true);
+	}
+
+	private function isExcludedFromRevenueStatus(string $status): bool
+	{
+		return in_array($status, array('cancelled', 'zrusena', 'failed', 'neuspesna'), true);
+	}
+
+	private function isTerminalNonPendingStatus(string $status): bool
+	{
+		return in_array(
+			$status,
+			array('cancelled', 'zrusena', 'failed', 'neuspesna', 'refunded', 'refundovana', 'completed', 'vybavena'),
+			true
 		);
 	}
 

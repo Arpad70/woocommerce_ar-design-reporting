@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.8 - 2026-04-25
+
+- dashboard KPI rozšírené o segmenty: celkové/vybavené/čakajúce objednávky, obraty a priemerné hodnoty objednávok
+- pridané porovnanie období s výchozím nastavením na rovnaký dátum minulého roka
+- KPI karty upravené do business layoutu s percentuálnou zmenou (delta) voči porovnávaciemu obdobiu
+
+
 ## 0.3.7 - 2026-04-25
 
 - release obnovuje kontinuitu automatických aktualizací ve WordPressu po nasazení změn dashboardu

@@ -45,7 +45,7 @@ final class DashboardQueryService
 	 * @param array<string, string> $filters
 	 * @return array<string, mixed>
 	 */
-	public function getDashboardData(array $filters = array()): array
+	public function getDashboardData(array $filters = array(), array $compare_filters = array()): array
 	{
 		$order_rows = $this->order_processing_repository->getOrderRowsForDashboard($filters, 200);
 		$order_ids  = array();
@@ -116,8 +116,13 @@ final class DashboardQueryService
 		$overall_avg_ready_seconds = $this->calculateOverallAverageReadySeconds($manager_ready_seconds);
 		$manager_performance = $this->buildManagerPerformanceRows($manager_ready_seconds, array_keys($manager_map));
 
+		$current_kpis = $this->kpi_calculator->getOverview($filters, $default_manager_avg_ready_seconds, $overall_avg_ready_seconds);
+		$compare_kpis = $this->kpi_calculator->getOverview($compare_filters);
+
 		return array(
-			'kpis'           => $this->kpi_calculator->getOverview($filters, $default_manager_avg_ready_seconds, $overall_avg_ready_seconds),
+			'kpis'           => $current_kpis,
+			'compare_kpis'   => $compare_kpis,
+			'kpi_compare'    => $this->buildKpiComparison($current_kpis, $compare_kpis),
 			'tables'         => $this->tables->all(),
 			'missing_tables' => $this->migrator->getMissingTables(),
 			'hpos_enabled'   => $this->compatibility->isHposEnabled(),
@@ -127,6 +132,42 @@ final class DashboardQueryService
 			'manager_performance' => $manager_performance,
 			'default_manager_user_id' => $default_manager_user_id,
 		);
+	}
+
+	/**
+	 * @param array<string, int|float> $current_kpis
+	 * @param array<string, int|float> $compare_kpis
+	 * @return array<string, array<string, float>>
+	 */
+	private function buildKpiComparison(array $current_kpis, array $compare_kpis): array
+	{
+		$comparison = array();
+
+		foreach ($current_kpis as $key => $current_value) {
+			if (! is_numeric($current_value)) {
+				continue;
+			}
+
+			$current = (float) $current_value;
+			$previous = isset($compare_kpis[$key]) && is_numeric($compare_kpis[$key]) ? (float) $compare_kpis[$key] : 0.0;
+			$delta = $current - $previous;
+			$delta_percent = 0.0;
+
+			if (abs($previous) > 0.00001) {
+				$delta_percent = ($delta / $previous) * 100;
+			} elseif (abs($current) > 0.00001) {
+				$delta_percent = 100.0;
+			}
+
+			$comparison[$key] = array(
+				'current' => $current,
+				'previous' => $previous,
+				'delta' => $delta,
+				'delta_percent' => $delta_percent,
+			);
+		}
+
+		return $comparison;
 	}
 
 	/**

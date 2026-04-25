@@ -72,6 +72,19 @@ final class DashboardPage
 		if ('' === trim($export_date_to)) {
 			$export_date_to = $default_date_to;
 		}
+		$default_compare_from = $this->getIsoDateOffsetYears($export_date_from, -1);
+		$default_compare_to = $this->getIsoDateOffsetYears($export_date_to, -1);
+		$compare_date_from = isset($_GET['compare_date_from']) ? sanitize_text_field(wp_unslash($_GET['compare_date_from'])) : $default_compare_from;
+		$compare_date_to = isset($_GET['compare_date_to']) ? sanitize_text_field(wp_unslash($_GET['compare_date_to'])) : $default_compare_to;
+
+		if ('' === trim($compare_date_from)) {
+			$compare_date_from = $default_compare_from;
+		}
+
+		if ('' === trim($compare_date_to)) {
+			$compare_date_to = $default_compare_to;
+		}
+
 		$dashboard_filters = $this->export_manager->normalizeFilters(
 			array(
 				'status'         => $export_status,
@@ -80,11 +93,21 @@ final class DashboardPage
 				'date_to'        => $export_date_to,
 			)
 		);
-		$data         = $this->dashboard_query_service->getDashboardData($dashboard_filters);
+		$compare_filters = $this->export_manager->normalizeFilters(
+			array(
+				'status'         => $export_status,
+				'classification' => $export_classification,
+				'date_from'      => $compare_date_from,
+				'date_to'        => $compare_date_to,
+			)
+		);
+		$data         = $this->dashboard_query_service->getDashboardData($dashboard_filters, $compare_filters);
 		$export_info  = $this->export_manager->describeCsvExport($dashboard_filters);
 		$email_info   = $this->email_reporter->describeDigest();
 		$email_configs = $this->email_reporter->getConfigurations();
 		$kpis         = is_array($data['kpis']) ? $data['kpis'] : array();
+		$compare_kpis = is_array($data['compare_kpis'] ?? null) ? $data['compare_kpis'] : array();
+		$kpi_compare  = is_array($data['kpi_compare'] ?? null) ? $data['kpi_compare'] : array();
 		$tables       = is_array($data['tables']) ? $data['tables'] : array();
 		$missing      = is_array($data['missing_tables']) ? $data['missing_tables'] : array();
 		$orders_overview = is_array($data['orders_overview'] ?? null) ? $data['orders_overview'] : array();
@@ -139,6 +162,10 @@ final class DashboardPage
 		echo '<input id="ard-dashboard-date-from" type="date" name="date_from" value="' . esc_attr($export_date_from) . '" /></p>';
 		echo '<p><label for="ard-dashboard-date-to">' . esc_html__('Datum do', 'ar-design-reporting') . '</label><br />';
 		echo '<input id="ard-dashboard-date-to" type="date" name="date_to" value="' . esc_attr($export_date_to) . '" /></p>';
+		echo '<p><label for="ard-dashboard-compare-date-from">' . esc_html__('Porovnanie od', 'ar-design-reporting') . '</label><br />';
+		echo '<input id="ard-dashboard-compare-date-from" type="date" name="compare_date_from" value="' . esc_attr($compare_date_from) . '" /></p>';
+		echo '<p><label for="ard-dashboard-compare-date-to">' . esc_html__('Porovnanie do', 'ar-design-reporting') . '</label><br />';
+		echo '<input id="ard-dashboard-compare-date-to" type="date" name="compare_date_to" value="' . esc_attr($compare_date_to) . '" /></p>';
 		echo '<p>';
 		submit_button(__('Použiť filtre', 'ar-design-reporting'), 'secondary', 'submit', false);
 		echo '</p>';
@@ -197,7 +224,7 @@ final class DashboardPage
 		echo '</ul>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('KPI snapshot', 'ar-design-reporting') . '</h2>';
-		$this->renderKpiCards($kpis);
+		$this->renderKpiCards($kpis, $kpi_compare, $compare_date_from, $compare_date_to);
 		echo '<table class="widefat striped" style="max-width:960px;">';
 		echo '<thead><tr><th>' . esc_html__('Metrika', 'ar-design-reporting') . '</th><th>' . esc_html__('Hodnota', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
@@ -205,7 +232,9 @@ final class DashboardPage
 		foreach ($kpis as $key => $value) {
 			echo '<tr>';
 			echo '<td>' . esc_html($this->getKpiLabel((string) $key)) . '</td>';
-			echo '<td>' . esc_html($this->formatKpiValue((string) $key, $value)) . '</td>';
+			$compare_value = $compare_kpis[(string) $key] ?? null;
+			$compare_label = null !== $compare_value ? $this->formatKpiValue((string) $key, $compare_value) : __('Nevyplněno', 'ar-design-reporting');
+			echo '<td>' . esc_html($this->formatKpiValue((string) $key, $value)) . ' <small style="color:#64748b;">(' . esc_html__('porovnanie', 'ar-design-reporting') . ': ' . esc_html($compare_label) . ')</small></td>';
 			echo '</tr>';
 		}
 
@@ -542,19 +571,55 @@ final class DashboardPage
 
 	/**
 	 * @param array<string, int|float> $kpis
+	 * @param array<string, array<string, float>> $kpi_compare
 	 */
-	private function renderKpiCards(array $kpis): void
+	private function renderKpiCards(array $kpis, array $kpi_compare, string $compare_date_from, string $compare_date_to): void
 	{
 		if (empty($kpis)) {
 			return;
 		}
 
+		$card_keys = array(
+			'total_orders',
+			'completed_orders',
+			'pending_orders',
+			'gross_revenue',
+			'revenue_completed',
+			'revenue_pending',
+			'average_order_value',
+			'average_order_value_completed',
+			'average_order_value_pending',
+			'cancelled_orders',
+		);
+
+		echo '<div class="ard-kpi-compare-info">' . esc_html(
+			sprintf(
+				/* translators: 1: compare from date, 2: compare to date */
+				__('Porovnanie voči obdobiu %1$s až %2$s', 'ar-design-reporting'),
+				$compare_date_from,
+				$compare_date_to
+			)
+		) . '</div>';
 		echo '<div class="ard-kpi-grid">';
 
-		foreach ($kpis as $key => $value) {
-			echo '<div class="ard-kpi-card">';
-			echo '<div class="ard-kpi-label">' . esc_html($this->getKpiLabel((string) $key)) . '</div>';
+		foreach ($card_keys as $key) {
+			if (! array_key_exists($key, $kpis)) {
+				continue;
+			}
+
+			$value = $kpis[$key];
+			$comparison = $kpi_compare[$key] ?? array();
+			$delta_percent = isset($comparison['delta_percent']) ? (float) $comparison['delta_percent'] : 0.0;
+			$delta_class = $delta_percent > 0 ? 'is-up' : ($delta_percent < 0 ? 'is-down' : 'is-neutral');
+			$delta_prefix = $delta_percent > 0 ? '+' : '';
+			$delta_arrow = $delta_percent > 0 ? '↑' : ($delta_percent < 0 ? '↓' : '→');
+
+			echo '<div class="ard-kpi-card ' . esc_attr($delta_class) . '">';
+			echo '<div class="ard-kpi-card-top">';
 			echo '<div class="ard-kpi-value">' . esc_html($this->formatKpiValue((string) $key, $value)) . '</div>';
+			echo '<div class="ard-kpi-delta">' . esc_html($delta_arrow . ' ' . $delta_prefix . number_format($delta_percent, 2, ',', ' ') . ' %') . '</div>';
+			echo '</div>';
+			echo '<div class="ard-kpi-label">' . esc_html($this->getKpiLabel((string) $key)) . '</div>';
 			echo '</div>';
 		}
 
@@ -577,10 +642,16 @@ final class DashboardPage
 		.ard-reporting-dashboard input[type="number"],
 		.ard-reporting-dashboard input[type="email"],
 		.ard-reporting-dashboard select { min-height: 36px; border-radius: 8px; border-color: #cbd5e1; }
-		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
-		.ard-kpi-card { background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid #dbe6f3; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
-		.ard-kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #52617a; margin-bottom: 7px; }
-		.ard-kpi-value { font-size: 24px; font-weight: 700; color: #0f172a; }
+		.ard-kpi-compare-info { margin: 0 0 10px 2px; color: #64748b; font-size: 12px; }
+		.ard-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 0 0 14px 0; }
+		.ard-kpi-card { background: linear-gradient(130deg, #ffffff 0%, #f8fafc 55%, #f1f5f9 100%); border: 1px solid #dbe6f3; border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+		.ard-kpi-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+		.ard-kpi-label { font-size: 12px; font-weight: 600; color: #52617a; margin: 0; }
+		.ard-kpi-value { font-size: 34px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+		.ard-kpi-delta { font-size: 28px; line-height: 1; font-weight: 700; white-space: nowrap; }
+		.ard-kpi-card.is-up .ard-kpi-delta { color: #16a34a; }
+		.ard-kpi-card.is-down .ard-kpi-delta { color: #dc2626; }
+		.ard-kpi-card.is-neutral .ard-kpi-delta { color: #64748b; }
 		.ard-pro-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr); gap: 16px; margin-top: 18px; align-items: start; }
 		.ard-panel { background: #fff; border: 1px solid #d9e0e7; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
 		.ard-panel + .ard-panel { margin-top: 0; }
@@ -612,7 +683,8 @@ final class DashboardPage
 		@media (max-width: 900px) {
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
-			.ard-kpi-value { font-size: 20px; }
+			.ard-kpi-value { font-size: 26px; }
+			.ard-kpi-delta { font-size: 20px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
 		}
@@ -797,10 +869,16 @@ final class DashboardPage
 	{
 		$labels = array(
 			'gross_revenue'        => __('Obrat', 'ar-design-reporting'),
+			'revenue_completed'    => __('Obrat vybavených objednávok', 'ar-design-reporting'),
+			'revenue_pending'      => __('Obrat čakajúcich objednávok', 'ar-design-reporting'),
 			'total_orders'         => __('Počet objednávok', 'ar-design-reporting'),
+			'completed_orders'     => __('Počet vybavených objednávok', 'ar-design-reporting'),
+			'pending_orders'       => __('Počet čakajúcich objednávok', 'ar-design-reporting'),
 			'cancelled_orders'     => __('Storná', 'ar-design-reporting'),
 			'net_revenue'          => __('Čistý obrat', 'ar-design-reporting'),
 			'average_order_value'  => __('Priemerná hodnota objednávky', 'ar-design-reporting'),
+			'average_order_value_completed' => __('Priemerná hodnota vybavených objednávok', 'ar-design-reporting'),
+			'average_order_value_pending' => __('Priemerná hodnota čakajúcich objednávok', 'ar-design-reporting'),
 			'avg_processing_hours' => __('Priemerný celkový čas procesu (h)', 'ar-design-reporting'),
 			'avg_ready_for_packing_hours' => __('Priemer na zahájenie workflow (h)', 'ar-design-reporting'),
 			'avg_ready_for_packing_hours_manager' => __('Priemer na zahájenie workflow (zvolený manažér) (h)', 'ar-design-reporting'),
@@ -818,8 +896,9 @@ final class DashboardPage
 	 */
 	private function formatKpiValue(string $key, $value): string
 	{
-		if (in_array($key, array('gross_revenue', 'net_revenue', 'average_order_value'), true)) {
-			return number_format((float) $value, 2, ',', ' ');
+		if (in_array($key, array('gross_revenue', 'net_revenue', 'average_order_value', 'revenue_completed', 'revenue_pending', 'average_order_value_completed', 'average_order_value_pending'), true)) {
+			$currency_symbol = $this->getStoreCurrencySymbol();
+			return number_format((float) $value, 2, ',', ' ') . ' ' . $currency_symbol;
 		}
 
 		if (in_array($key, array('avg_processing_hours', 'orders_per_employee', 'avg_ready_for_packing_hours', 'avg_ready_for_packing_hours_manager'), true)) {
@@ -831,6 +910,15 @@ final class DashboardPage
 		}
 
 		return wp_json_encode($value) ?: '';
+	}
+
+	private function getStoreCurrencySymbol(): string
+	{
+		if (function_exists('get_woocommerce_currency') && function_exists('get_woocommerce_currency_symbol')) {
+			return get_woocommerce_currency_symbol(get_woocommerce_currency());
+		}
+
+		return '€';
 	}
 
 	private function getTableLabel(string $key): string
@@ -1107,5 +1195,28 @@ final class DashboardPage
 		$timestamp = current_time('timestamp');
 
 		return gmdate('Y-m-d', (int) $timestamp);
+	}
+
+	private function getIsoDateOffsetYears(string $date, int $years): string
+	{
+		$date = trim($date);
+
+		if ('' === $date) {
+			$date = $this->getCurrentDateIso();
+		}
+
+		$base = \DateTimeImmutable::createFromFormat('Y-m-d', $date, new \DateTimeZone('UTC'));
+		if (! $base instanceof \DateTimeImmutable) {
+			return $date;
+		}
+
+		$modifier = $years >= 0 ? '+' . $years . ' years' : (string) $years . ' years';
+		$shifted = $base->modify($modifier);
+
+		if (! $shifted instanceof \DateTimeImmutable) {
+			return $date;
+		}
+
+		return $shifted->format('Y-m-d');
 	}
 }
