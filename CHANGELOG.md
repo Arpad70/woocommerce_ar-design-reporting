@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.10 - 2026-04-25
+
+- KPI delta je zarovnaná do pravého dolného rohu diagonálnej časti karty
+- KPI label je obmedzený na ľavú časť karty a pri dlhom texte sa skracuje (ellipsis), aby nikdy nepretekol do split oblasti
+
+
 ## 0.3.9 - 2026-04-25
 
 - KPI karty upravené do vizuálu podľa referencie: diagonálne rozdelenie, farebné pozadie a výrazná delta hodnota

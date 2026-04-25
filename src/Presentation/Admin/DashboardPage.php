@@ -680,10 +680,33 @@ final class DashboardPage
 			);
 			pointer-events: none;
 		}
-		.ard-kpi-card-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-		.ard-kpi-label { position: relative; z-index: 1; font-size: 11px; font-weight: 700; color: #5b6778; margin: 0; letter-spacing: .01em; }
+		.ard-kpi-card-top { position: relative; z-index: 1; display: block; margin-bottom: 10px; }
+		.ard-kpi-label {
+			position: relative;
+			z-index: 1;
+			display: block;
+			max-width: 52%;
+			font-size: 11px;
+			font-weight: 700;
+			color: #5b6778;
+			margin: 0;
+			letter-spacing: .01em;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
 		.ard-kpi-value { font-size: 36px; line-height: 1; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
-		.ard-kpi-delta { font-size: 32px; line-height: 1; font-weight: 700; white-space: nowrap; margin-top: 2px; }
+		.ard-kpi-delta {
+			position: absolute;
+			right: 14px;
+			bottom: 12px;
+			z-index: 2;
+			font-size: 32px;
+			line-height: 1;
+			font-weight: 700;
+			white-space: nowrap;
+			text-align: right;
+		}
 		.ard-kpi-card.is-up { --ard-kpi-accent-bg: rgba(16, 185, 129, 0.16); }
 		.ard-kpi-card.is-down { --ard-kpi-accent-bg: rgba(236, 72, 153, 0.13); }
 		.ard-kpi-card.is-neutral { --ard-kpi-accent-bg: rgba(148, 163, 184, 0.12); }
@@ -723,7 +746,7 @@ final class DashboardPage
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
 			.ard-kpi-grid { grid-template-columns: 1fr; }
 			.ard-kpi-value { font-size: 28px; }
-			.ard-kpi-delta { font-size: 22px; }
+			.ard-kpi-delta { right: 10px; bottom: 10px; font-size: 22px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
 		}
