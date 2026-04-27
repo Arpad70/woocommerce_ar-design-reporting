@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.15 - 2026-04-27
+
+- sekcia `Nastavenia a export` rozšírená o export do `.xlsx`
+- exportný formulár používa spoločné filtre pre CSV aj XLSX
+- doplnené generovanie validného XLSX súboru (Excel Open XML) priamo v plugine
+- exportný dataset je zjednotený pre CSV aj XLSX, aby bol obsah oboch výstupov konzistentný
+
 ## 0.3.14 - 2026-04-27
 
 - odstránená logika manažéra procesu vrátane fallbackov a dashboard sekcií naviazaných na manažéra
