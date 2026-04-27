@@ -720,9 +720,13 @@ final class DashboardPage
 			return;
 		}
 
-		$slices = array();
+		$segments = array();
 		$legend_rows = array();
 		$offset = 0.0;
+		$cx = 130.0;
+		$cy = 98.0;
+		$radius = 86.0;
+		$depth = 20.0;
 
 		foreach ($audit_overview as $index => $row) {
 			$event_type = sanitize_key((string) ($row['event_type'] ?? ''));
@@ -736,7 +740,12 @@ final class DashboardPage
 			$offset += $ratio;
 			$end = $offset * 360.0;
 			$color = $this->auditColorByIndex((int) $index);
-			$slices[] = $color . ' ' . number_format($start, 2, '.', '') . 'deg ' . number_format($end, 2, '.', '') . 'deg';
+			$segments[] = array(
+				'start' => $start,
+				'end'   => $end,
+				'color' => $color,
+				'side'  => $this->darkenHexColor($color, 0.7),
+			);
 			$legend_rows[] = array(
 				'color' => $color,
 				'label' => $this->formatAuditEventLabel($event_type),
@@ -744,12 +753,41 @@ final class DashboardPage
 			);
 		}
 
-		if (empty($slices) || empty($legend_rows)) {
+		if (empty($segments) || empty($legend_rows)) {
 			return;
 		}
 
+		$chart_id = 'ard-audit-pie-' . substr(md5((string) wp_rand()), 0, 8);
+
 		echo '<div class="ard-audit-pie-wrap">';
-		echo '<div class="ard-audit-pie" style="--ard-audit-pie-gradient: conic-gradient(' . esc_attr(implode(', ', $slices)) . ');"></div>';
+		echo '<div class="ard-audit-pie" aria-hidden="true">';
+		echo '<svg class="ard-audit-pie-svg" viewBox="0 0 280 230" role="img" aria-label="' . esc_attr__('3D koláčový graf auditných udalostí', 'ar-design-reporting') . '">';
+		echo '<defs>';
+		echo '<filter id="' . esc_attr($chart_id . '-shadow') . '" x="-40%" y="-40%" width="180%" height="220%">';
+		echo '<feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.22" />';
+		echo '</filter>';
+		echo '<clipPath id="' . esc_attr($chart_id . '-front') . '">';
+		echo '<rect x="0" y="' . esc_attr((string) ($cy - 1.0)) . '" width="280" height="230" />';
+		echo '</clipPath>';
+		echo '<radialGradient id="' . esc_attr($chart_id . '-highlight') . '" cx="30%" cy="18%" r="64%">';
+		echo '<stop offset="0%" stop-color="rgba(255,255,255,0.55)" />';
+		echo '<stop offset="44%" stop-color="rgba(255,255,255,0.12)" />';
+		echo '<stop offset="100%" stop-color="rgba(255,255,255,0)" />';
+		echo '</radialGradient>';
+		echo '</defs>';
+		echo '<g class="ard-audit-pie-depth" clip-path="url(#' . esc_attr($chart_id . '-front') . ')">';
+		foreach ($segments as $segment) {
+			echo '<path d="' . esc_attr($this->buildPieSidePath($cx, $cy, $radius, $depth, (float) $segment['start'], (float) $segment['end'])) . '" fill="' . esc_attr((string) $segment['side']) . '" />';
+		}
+		echo '</g>';
+		echo '<g class="ard-audit-pie-top" filter="url(#' . esc_attr($chart_id . '-shadow') . ')">';
+		foreach ($segments as $segment) {
+			echo '<path d="' . esc_attr($this->buildPieSlicePath($cx, $cy, $radius, (float) $segment['start'], (float) $segment['end'])) . '" fill="' . esc_attr((string) $segment['color']) . '" stroke="rgba(255,255,255,0.72)" stroke-width="1" />';
+		}
+		echo '<ellipse cx="' . esc_attr((string) $cx) . '" cy="' . esc_attr((string) $cy) . '" rx="' . esc_attr((string) ($radius - 1.5)) . '" ry="' . esc_attr((string) ($radius - 1.5)) . '" fill="url(#' . esc_attr($chart_id . '-highlight') . ')" />';
+		echo '</g>';
+		echo '</svg>';
+		echo '</div>';
 		echo '<ul class="ard-audit-legend">';
 		foreach ($legend_rows as $legend_row) {
 			echo '<li>';
@@ -760,6 +798,124 @@ final class DashboardPage
 		}
 		echo '</ul>';
 		echo '</div>';
+	}
+
+	private function buildPieSlicePath(float $cx, float $cy, float $radius, float $start_angle, float $end_angle): string
+	{
+		$delta = $end_angle - $start_angle;
+		if ($delta >= 359.99) {
+			$top = $cy - $radius;
+			$bottom = $cy + $radius;
+			return sprintf(
+				'M %.2F %.2F A %.2F %.2F 0 1 1 %.2F %.2F A %.2F %.2F 0 1 1 %.2F %.2F Z',
+				$cx,
+				$top,
+				$radius,
+				$radius,
+				$cx,
+				$bottom,
+				$radius,
+				$radius,
+				$cx,
+				$top
+			);
+		}
+
+		$start = $this->pointOnPie($cx, $cy, $radius, $start_angle);
+		$end = $this->pointOnPie($cx, $cy, $radius, $end_angle);
+		$large_arc = $delta > 180.0 ? 1 : 0;
+
+		return sprintf(
+			'M %.2F %.2F L %.2F %.2F A %.2F %.2F 0 %d 1 %.2F %.2F Z',
+			$cx,
+			$cy,
+			$start['x'],
+			$start['y'],
+			$radius,
+			$radius,
+			$large_arc,
+			$end['x'],
+			$end['y']
+		);
+	}
+
+	private function buildPieSidePath(float $cx, float $cy, float $radius, float $depth, float $start_angle, float $end_angle): string
+	{
+		$delta = $end_angle - $start_angle;
+		if ($delta >= 359.99) {
+			$top = $cy + $radius;
+			$bottom = $cy + $radius + $depth;
+			return sprintf(
+				'M %.2F %.2F A %.2F %.2F 0 1 1 %.2F %.2F L %.2F %.2F A %.2F %.2F 0 1 0 %.2F %.2F Z',
+				$cx - $radius,
+				$top,
+				$radius,
+				$radius,
+				$cx + $radius,
+				$top,
+				$cx + $radius,
+				$bottom,
+				$radius,
+				$radius,
+				$cx - $radius,
+				$bottom
+			);
+		}
+
+		$start = $this->pointOnPie($cx, $cy, $radius, $start_angle);
+		$end = $this->pointOnPie($cx, $cy, $radius, $end_angle);
+		$start_bottom = array('x' => $start['x'], 'y' => $start['y'] + $depth);
+		$end_bottom = array('x' => $end['x'], 'y' => $end['y'] + $depth);
+		$large_arc = $delta > 180.0 ? 1 : 0;
+
+		return sprintf(
+			'M %.2F %.2F A %.2F %.2F 0 %d 1 %.2F %.2F L %.2F %.2F A %.2F %.2F 0 %d 0 %.2F %.2F Z',
+			$start['x'],
+			$start['y'],
+			$radius,
+			$radius,
+			$large_arc,
+			$end['x'],
+			$end['y'],
+			$end_bottom['x'],
+			$end_bottom['y'],
+			$radius,
+			$radius,
+			$large_arc,
+			$start_bottom['x'],
+			$start_bottom['y']
+		);
+	}
+
+	/**
+	 * @return array{x: float, y: float}
+	 */
+	private function pointOnPie(float $cx, float $cy, float $radius, float $angle): array
+	{
+		$radians = deg2rad($angle - 90.0);
+		return array(
+			'x' => $cx + cos($radians) * $radius,
+			'y' => $cy + sin($radians) * $radius,
+		);
+	}
+
+	private function darkenHexColor(string $hex_color, float $factor): string
+	{
+		$normalized = ltrim($hex_color, '#');
+		if (strlen($normalized) === 3) {
+			$normalized = $normalized[0] . $normalized[0] . $normalized[1] . $normalized[1] . $normalized[2] . $normalized[2];
+		}
+
+		if (! preg_match('/^[0-9a-fA-F]{6}$/', $normalized)) {
+			return '#334155';
+		}
+
+		$factor = max(0.0, min(1.0, $factor));
+		$red = (int) round(hexdec(substr($normalized, 0, 2)) * $factor);
+		$green = (int) round(hexdec(substr($normalized, 2, 2)) * $factor);
+		$blue = (int) round(hexdec(substr($normalized, 4, 2)) * $factor);
+
+		return sprintf('#%02x%02x%02x', $red, $green, $blue);
 	}
 
 	private function auditColorByIndex(int $index): string
@@ -899,39 +1055,22 @@ final class DashboardPage
 		.ard-orders-overview-page-size select { min-height: 30px; }
 		.ard-audit-pie-wrap { margin-top: 12px; display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
 		.ard-audit-pie {
-			--ard-audit-pie-gradient: conic-gradient(#94a3b8 0deg 360deg);
-			width: 220px;
-			height: 220px;
-			position: relative;
-			border-radius: 50%;
-			border: 1px solid #d9e0e7;
-			background: var(--ard-audit-pie-gradient);
+			width: 280px;
+			height: 230px;
 			flex: 0 0 auto;
-			transform: perspective(900px) rotateX(40deg);
-			transform-origin: center;
-			box-shadow:
-				0 14px 20px rgba(15, 23, 42, 0.18),
-				inset 0 1px 0 rgba(255,255,255,.65);
 		}
-		.ard-audit-pie::before {
-			content: "";
-			position: absolute;
-			left: 0;
-			right: 0;
-			top: 12px;
-			bottom: -12px;
-			border-radius: 50%;
-			background: var(--ard-audit-pie-gradient);
-			filter: brightness(0.72) saturate(0.9);
-			z-index: -1;
+		.ard-audit-pie-svg {
+			display: block;
+			width: 100%;
+			height: auto;
+			overflow: visible;
 		}
-		.ard-audit-pie::after {
-			content: "";
-			position: absolute;
-			inset: 0;
-			border-radius: 50%;
-			background: radial-gradient(circle at 30% 24%, rgba(255,255,255,.34), rgba(255,255,255,0) 48%);
-			pointer-events: none;
+		.ard-audit-pie-top path {
+			transition: transform .22s ease;
+			transform-origin: 130px 98px;
+		}
+		.ard-audit-pie-top path:hover {
+			transform: translateY(-2px);
 		}
 		.ard-audit-legend { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; min-width: 320px; }
 		.ard-audit-legend li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
@@ -968,7 +1107,7 @@ final class DashboardPage
 			.ard-orders-overview-pagination { justify-content: flex-start; }
 			.ard-audit-events-table { min-width: 840px; font-size: 12px; }
 			.ard-audit-events-pagination { justify-content: flex-start; }
-			.ard-audit-pie { width: 170px; height: 170px; }
+			.ard-audit-pie { width: 220px; height: 180px; }
 			.ard-audit-legend { min-width: 0; width: 100%; }
 		}
 		</style>';
