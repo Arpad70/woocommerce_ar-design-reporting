@@ -46,11 +46,13 @@ final class KpiCalculator
 			'gross_revenue'          => (float) ( $financials['gross_revenue'] ?? 0.0 ),
 			'revenue_completed'      => (float) ( $financials['revenue_completed'] ?? 0.0 ),
 			'revenue_pending'        => (float) ( $financials['revenue_pending'] ?? 0.0 ),
+			'revenue_cancelled'      => (float) ( $financials['revenue_cancelled'] ?? 0.0 ),
 			'cancelled_orders'       => (int) ( $financials['cancelled_orders'] ?? 0 ),
 			'net_revenue'            => (float) ( $financials['net_revenue'] ?? 0.0 ),
 			'average_order_value'    => (float) ( $financials['average_order_value'] ?? 0.0 ),
 			'average_order_value_completed' => (float) ( $financials['average_order_value_completed'] ?? 0.0 ),
 			'average_order_value_pending' => (float) ( $financials['average_order_value_pending'] ?? 0.0 ),
+			'average_order_value_cancelled' => (float) ( $financials['average_order_value_cancelled'] ?? 0.0 ),
 			'avg_processing_hours'   => $avg_processing_seconds > 0 ? round( $avg_processing_seconds / 3600, 2 ) : 0.0,
 			'orders_per_employee'    => $orders_per_employee > 0 ? round( $orders_per_employee, 2 ) : 0.0,
 			'avg_ready_for_packing_hours' => $overall_ready_avg_seconds > 0 ? round($overall_ready_avg_seconds / 3600, 2) : 0.0,
@@ -69,12 +71,14 @@ final class KpiCalculator
 				'revenue_completed'   => 0.0,
 				'revenue_pending'     => 0.0,
 				'cancelled_orders'    => 0,
+				'revenue_cancelled'   => 0.0,
 				'completed_orders'    => 0,
 				'pending_orders'      => 0,
 				'net_revenue'         => 0.0,
 				'average_order_value' => 0.0,
 				'average_order_value_completed' => 0.0,
 				'average_order_value_pending' => 0.0,
+				'average_order_value_cancelled' => 0.0,
 			);
 		}
 
@@ -84,12 +88,14 @@ final class KpiCalculator
 				'revenue_completed'   => 0.0,
 				'revenue_pending'     => 0.0,
 				'cancelled_orders'    => 0,
+				'revenue_cancelled'   => 0.0,
 				'completed_orders'    => 0,
 				'pending_orders'      => 0,
 				'net_revenue'         => 0.0,
 				'average_order_value' => 0.0,
 				'average_order_value_completed' => 0.0,
 				'average_order_value_pending' => 0.0,
+				'average_order_value_cancelled' => 0.0,
 			);
 		}
 
@@ -103,6 +109,7 @@ final class KpiCalculator
 		$revenue_pending = 0.0;
 		$completed_for_average = 0;
 		$pending_for_average = 0;
+		$revenue_cancelled = 0.0;
 
 		foreach ($order_ids as $order_id) {
 			$order = wc_get_order((int) $order_id);
@@ -118,6 +125,7 @@ final class KpiCalculator
 
 			if ($this->isCancelledLikeStatus($status)) {
 				$cancelled++;
+				$revenue_cancelled += $total;
 			}
 
 			$net_amount = max(0.0, $total - $refunded);
@@ -146,12 +154,14 @@ final class KpiCalculator
 			'revenue_completed'   => round($revenue_completed, 2),
 			'revenue_pending'     => round($revenue_pending, 2),
 			'cancelled_orders'    => $cancelled,
+			'revenue_cancelled'   => round($revenue_cancelled, 2),
 			'completed_orders'    => $completed_orders,
 			'pending_orders'      => $pending_orders,
 			'net_revenue'         => round($net, 2),
 			'average_order_value' => $count_for_average > 0 ? round($net / $count_for_average, 2) : 0.0,
 			'average_order_value_completed' => $completed_for_average > 0 ? round($revenue_completed / $completed_for_average, 2) : 0.0,
 			'average_order_value_pending' => $pending_for_average > 0 ? round($revenue_pending / $pending_for_average, 2) : 0.0,
+			'average_order_value_cancelled' => $cancelled > 0 ? round($revenue_cancelled / $cancelled, 2) : 0.0,
 		);
 	}
 

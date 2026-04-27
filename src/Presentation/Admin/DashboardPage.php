@@ -623,9 +623,11 @@ final class DashboardPage
 			'gross_revenue',
 			'revenue_completed',
 			'revenue_pending',
+			'revenue_cancelled',
 			'average_order_value',
 			'average_order_value_completed',
 			'average_order_value_pending',
+			'average_order_value_cancelled',
 			'cancelled_orders',
 		);
 
@@ -1370,6 +1372,7 @@ final class DashboardPage
 			'gross_revenue'        => __('Obrat', 'ar-design-reporting'),
 			'revenue_completed'    => __('Obrat vybavených objednávok', 'ar-design-reporting'),
 			'revenue_pending'      => __('Obrat čakajúcich objednávok', 'ar-design-reporting'),
+			'revenue_cancelled'    => __('Obrat za storná', 'ar-design-reporting'),
 			'total_orders'         => __('Počet objednávok', 'ar-design-reporting'),
 			'completed_orders'     => __('Počet vybavených objednávok', 'ar-design-reporting'),
 			'pending_orders'       => __('Počet čakajúcich objednávok', 'ar-design-reporting'),
@@ -1378,6 +1381,7 @@ final class DashboardPage
 			'average_order_value'  => __('Priemerná hodnota objednávky', 'ar-design-reporting'),
 			'average_order_value_completed' => __('Priemerná hodnota vybavených objednávok', 'ar-design-reporting'),
 			'average_order_value_pending' => __('Priemerná hodnota čakajúcich objednávok', 'ar-design-reporting'),
+			'average_order_value_cancelled' => __('Priemerná hodnota stornovanej objednávky', 'ar-design-reporting'),
 			'avg_processing_hours' => __('Priemerný celkový čas procesu (h)', 'ar-design-reporting'),
 			'avg_ready_for_packing_hours' => __('Priemer na zahájenie workflow (h)', 'ar-design-reporting'),
 			'orders_per_employee'  => __('Objednávky na zamestnanca', 'ar-design-reporting'),
@@ -1394,7 +1398,7 @@ final class DashboardPage
 	 */
 	private function formatKpiValue(string $key, $value): string
 	{
-		if (in_array($key, array('gross_revenue', 'net_revenue', 'average_order_value', 'revenue_completed', 'revenue_pending', 'average_order_value_completed', 'average_order_value_pending'), true)) {
+		if (in_array($key, array('gross_revenue', 'net_revenue', 'average_order_value', 'revenue_completed', 'revenue_pending', 'revenue_cancelled', 'average_order_value_completed', 'average_order_value_pending', 'average_order_value_cancelled'), true)) {
 			$currency_symbol = $this->getStoreCurrencySymbol();
 			return number_format((float) $value, 2, ',', ' ') . ' ' . $currency_symbol;
 		}
