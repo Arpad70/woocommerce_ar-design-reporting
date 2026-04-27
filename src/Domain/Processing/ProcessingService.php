@@ -81,8 +81,22 @@ final class ProcessingService
 			$update_data['owner_user_id'] = $actor_user_id;
 		}
 
-		if ('na-odoslanie' === $canonical_to_status) {
+		if (
+			('na-odoslanie' === $canonical_to_status || 'processing' === $canonical_to_status)
+			&& empty($record['started_at_gmt'])
+		) {
+			// Resume from on-hold back to processing should open workflow timing when it is missing.
 			$update_data['started_at_gmt'] = current_time('mysql', true);
+		}
+
+		if ('vybavena' === $canonical_to_status && empty($record['processing_seconds'])) {
+			$finished_at = current_time('mysql', true);
+			$process_started_at = ! empty($record['created_at_gmt'])
+				? (string) $record['created_at_gmt']
+				: (! empty($record['started_at_gmt']) ? (string) $record['started_at_gmt'] : $finished_at);
+
+			$update_data['finished_at_gmt'] = $finished_at;
+			$update_data['processing_seconds'] = $this->calculateProcessingSeconds($process_started_at, $finished_at);
 		}
 
 		$this->order_processing_repository->updateByOrderId(
