@@ -749,7 +749,7 @@ final class DashboardPage
 		}
 
 		echo '<div class="ard-audit-pie-wrap">';
-		echo '<div class="ard-audit-pie" style="background:conic-gradient(' . esc_attr(implode(', ', $slices)) . ');"></div>';
+		echo '<div class="ard-audit-pie" style="--ard-audit-pie-gradient: conic-gradient(' . esc_attr(implode(', ', $slices)) . ');"></div>';
 		echo '<ul class="ard-audit-legend">';
 		foreach ($legend_rows as $legend_row) {
 			echo '<li>';
@@ -899,13 +899,39 @@ final class DashboardPage
 		.ard-orders-overview-page-size select { min-height: 30px; }
 		.ard-audit-pie-wrap { margin-top: 12px; display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
 		.ard-audit-pie {
+			--ard-audit-pie-gradient: conic-gradient(#94a3b8 0deg 360deg);
 			width: 220px;
 			height: 220px;
+			position: relative;
 			border-radius: 50%;
 			border: 1px solid #d9e0e7;
-			box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
-			background: #f8fafc;
+			background: var(--ard-audit-pie-gradient);
 			flex: 0 0 auto;
+			transform: perspective(900px) rotateX(40deg);
+			transform-origin: center;
+			box-shadow:
+				0 14px 20px rgba(15, 23, 42, 0.18),
+				inset 0 1px 0 rgba(255,255,255,.65);
+		}
+		.ard-audit-pie::before {
+			content: "";
+			position: absolute;
+			left: 0;
+			right: 0;
+			top: 12px;
+			bottom: -12px;
+			border-radius: 50%;
+			background: var(--ard-audit-pie-gradient);
+			filter: brightness(0.72) saturate(0.9);
+			z-index: -1;
+		}
+		.ard-audit-pie::after {
+			content: "";
+			position: absolute;
+			inset: 0;
+			border-radius: 50%;
+			background: radial-gradient(circle at 30% 24%, rgba(255,255,255,.34), rgba(255,255,255,0) 48%);
+			pointer-events: none;
 		}
 		.ard-audit-legend { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; min-width: 320px; }
 		.ard-audit-legend li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
