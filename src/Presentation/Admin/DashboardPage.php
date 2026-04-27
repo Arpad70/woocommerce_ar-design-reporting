@@ -113,11 +113,22 @@ final class DashboardPage
 		$orders_overview = is_array($data['orders_overview'] ?? null) ? $data['orders_overview'] : array();
 		$employee_overview = is_array($data['employee_overview'] ?? null) ? $data['employee_overview'] : array();
 		$audit_overview = is_array($data['audit_overview'] ?? null) ? $data['audit_overview'] : array();
+		$selected_audit_event_type = isset($_GET['audit_event_type']) ? sanitize_key(wp_unslash($_GET['audit_event_type'])) : '';
+		$recent_audit_events = $this->dashboard_query_service->getRecentAuditEvents($dashboard_filters, $selected_audit_event_type, 100);
 		$sample_order = isset($_GET['order_id']) ? absint(wp_unslash($_GET['order_id'])) : 0;
 		$workflow     = $sample_order > 0 ? $this->processing_service->getWorkflowSummary($sample_order) : array();
 		$timeline     = $sample_order > 0 ? $this->dashboard_query_service->getOrderTimeline($sample_order) : array();
 		$order_archives = $sample_order > 0 ? $this->order_archive_service->getRecentArchivesForOrder($sample_order, 10) : array();
 		$recent_deleted_archives = $this->order_archive_service->getRecentDeletedArchives(20);
+		$audit_filter_base_args = array(
+			'page'              => 'ar-design-reporting',
+			'status'            => $export_status,
+			'classification'    => $export_classification,
+			'date_from'         => $export_date_from,
+			'date_to'           => $export_date_to,
+			'compare_date_from' => $compare_date_from,
+			'compare_date_to'   => $compare_date_to,
+		);
 
 		echo '<div class="wrap">';
 		$this->renderDashboardStyles();
@@ -289,15 +300,75 @@ final class DashboardPage
 			echo '<tr><td colspan="2">' . esc_html__('Za zvolené obdobie nie sú auditné udalosti.', 'ar-design-reporting') . '</td></tr>';
 		} else {
 			foreach ($audit_overview as $audit_row) {
+				$event_type = sanitize_key((string) ($audit_row['event_type'] ?? ''));
+				$count = (int) ($audit_row['events_count'] ?? 0);
+				$event_link = add_query_arg(
+					array_merge(
+						$audit_filter_base_args,
+						array(
+							'audit_event_type' => $event_type,
+						)
+					),
+					admin_url('admin.php')
+				) . '#ard-audit-events-table';
 				echo '<tr>';
-				echo '<td>' . esc_html($this->formatAuditEventLabel((string) ($audit_row['event_type'] ?? ''))) . '</td>';
-				echo '<td>' . esc_html((string) ((int) ($audit_row['events_count'] ?? 0))) . '</td>';
+				echo '<td>' . esc_html($this->formatAuditEventLabel($event_type)) . '</td>';
+				echo '<td><a href="' . esc_url($event_link) . '">' . esc_html((string) $count) . '</a></td>';
 				echo '</tr>';
 			}
 		}
 
 		echo '</tbody>';
 		echo '</table>';
+		$this->renderAuditPieChart($audit_overview);
+
+		echo '<h3 id="ard-audit-events-table" style="margin-top:16px;">' . esc_html__('Aktuálne auditné udalosti', 'ar-design-reporting') . '</h3>';
+		if ('' !== $selected_audit_event_type) {
+			echo '<p>' . esc_html(
+				sprintf(
+					/* translators: %s: event label */
+					__('Filter udalostí: %s', 'ar-design-reporting'),
+					$this->formatAuditEventLabel($selected_audit_event_type)
+				)
+			) . ' <a href="' . esc_url(add_query_arg($audit_filter_base_args, admin_url('admin.php')) . '#ard-audit-events-table') . '">' . esc_html__('(zobraziť všetky)', 'ar-design-reporting') . '</a></p>';
+		}
+		echo '<table class="widefat striped" style="max-width:1200px;">';
+		echo '<thead><tr><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Udalosť', 'ar-design-reporting') . '</th><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Zdroj', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<tbody>';
+
+		if (empty($recent_audit_events)) {
+			echo '<tr><td colspan="6">' . esc_html__('Pre zvolený filter nie sú dostupné žiadne auditné udalosti.', 'ar-design-reporting') . '</td></tr>';
+		} else {
+			foreach ($recent_audit_events as $audit_event_row) {
+				$order_id = isset($audit_event_row['order_id']) ? (int) $audit_event_row['order_id'] : 0;
+				$order_label = $order_id > 0 ? $this->resolveOrderNumberLabel($order_id) : __('Nevyplněno', 'ar-design-reporting');
+				$order_cell = $order_id > 0
+					? '<a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html($order_label) . '</a>'
+					: esc_html($order_label);
+
+				echo '<tr>';
+				echo '<td>' . esc_html($this->formatGmtDate((string) ($audit_event_row['created_at_gmt'] ?? ''))) . '</td>';
+				echo '<td>' . esc_html($this->formatAuditEventLabel((string) ($audit_event_row['event_type'] ?? ''))) . '</td>';
+				echo '<td>' . $order_cell . '</td>';
+				echo '<td>' . esc_html($this->formatUserLabel((int) ($audit_event_row['actor_user_id'] ?? 0))) . '</td>';
+				echo '<td>' . esc_html($this->formatAuditChangeSummary($audit_event_row)) . '</td>';
+				echo '<td>' . esc_html($this->formatAuditSourceLabel($audit_event_row)) . '</td>';
+				echo '</tr>';
+			}
+		}
+
+		echo '</tbody>';
+		echo '</table>';
+		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:10px;background:#fff;border:1px solid #dcdcde;padding:12px;max-width:1200px;">';
+		wp_nonce_field('ard_export_audit_xlsx');
+		echo '<input type="hidden" name="action" value="ard_export_audit_xlsx" />';
+		echo '<input type="hidden" name="status" value="' . esc_attr($export_status) . '" />';
+		echo '<input type="hidden" name="classification" value="' . esc_attr($export_classification) . '" />';
+		echo '<input type="hidden" name="date_from" value="' . esc_attr($export_date_from) . '" />';
+		echo '<input type="hidden" name="date_to" value="' . esc_attr($export_date_to) . '" />';
+		echo '<input type="hidden" name="audit_event_type" value="' . esc_attr($selected_audit_event_type) . '" />';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__('Exportovať auditné udalosti (XLSX)', 'ar-design-reporting') . '</button>';
+		echo '</form>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Reporting tabulky', 'ar-design-reporting') . '</h2>';
 		echo '<table class="widefat striped" style="max-width:960px;">';
@@ -578,6 +649,86 @@ final class DashboardPage
 		echo '</div>';
 	}
 
+	/**
+	 * @param array<int, array<string, mixed>> $audit_overview
+	 */
+	private function renderAuditPieChart(array $audit_overview): void
+	{
+		if (empty($audit_overview)) {
+			return;
+		}
+
+		$total = 0;
+		foreach ($audit_overview as $row) {
+			$total += (int) ($row['events_count'] ?? 0);
+		}
+
+		if ($total <= 0) {
+			return;
+		}
+
+		$slices = array();
+		$legend_rows = array();
+		$offset = 0.0;
+
+		foreach ($audit_overview as $index => $row) {
+			$event_type = sanitize_key((string) ($row['event_type'] ?? ''));
+			$count = max(0, (int) ($row['events_count'] ?? 0));
+			if ('' === $event_type || $count <= 0) {
+				continue;
+			}
+
+			$ratio = $count / $total;
+			$start = $offset * 360.0;
+			$offset += $ratio;
+			$end = $offset * 360.0;
+			$color = $this->auditColorByIndex((int) $index);
+			$slices[] = $color . ' ' . number_format($start, 2, '.', '') . 'deg ' . number_format($end, 2, '.', '') . 'deg';
+			$legend_rows[] = array(
+				'color' => $color,
+				'label' => $this->formatAuditEventLabel($event_type),
+				'count' => $count,
+			);
+		}
+
+		if (empty($slices) || empty($legend_rows)) {
+			return;
+		}
+
+		echo '<div class="ard-audit-pie-wrap">';
+		echo '<div class="ard-audit-pie" style="background:conic-gradient(' . esc_attr(implode(', ', $slices)) . ');"></div>';
+		echo '<ul class="ard-audit-legend">';
+		foreach ($legend_rows as $legend_row) {
+			echo '<li>';
+			echo '<span class="ard-audit-legend-color" style="background:' . esc_attr((string) $legend_row['color']) . ';"></span>';
+			echo '<span class="ard-audit-legend-label">' . esc_html((string) $legend_row['label']) . '</span>';
+			echo '<span class="ard-audit-legend-count">' . esc_html((string) $legend_row['count']) . '</span>';
+			echo '</li>';
+		}
+		echo '</ul>';
+		echo '</div>';
+	}
+
+	private function auditColorByIndex(int $index): string
+	{
+		$palette = array(
+			'#2563eb',
+			'#059669',
+			'#d97706',
+			'#dc2626',
+			'#7c3aed',
+			'#0f766e',
+			'#4f46e5',
+			'#ea580c',
+			'#0284c7',
+			'#16a34a',
+			'#db2777',
+			'#475569',
+		);
+
+		return $palette[$index % count($palette)];
+	}
+
 	private function renderDashboardStyles(): void
 	{
 		echo '<style>
@@ -693,6 +844,21 @@ final class DashboardPage
 		.ard-orders-overview-page-info { color: #475569; font-size: 12px; min-width: 160px; text-align: center; }
 		.ard-orders-overview-page-size { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 12px; }
 		.ard-orders-overview-page-size select { min-height: 30px; }
+		.ard-audit-pie-wrap { margin-top: 12px; display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+		.ard-audit-pie {
+			width: 220px;
+			height: 220px;
+			border-radius: 50%;
+			border: 1px solid #d9e0e7;
+			box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
+			background: #f8fafc;
+			flex: 0 0 auto;
+		}
+		.ard-audit-legend { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; min-width: 320px; }
+		.ard-audit-legend li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; }
+		.ard-audit-legend-color { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(15,23,42,.08); }
+		.ard-audit-legend-label { color: #334155; }
+		.ard-audit-legend-count { color: #0f172a; font-weight: 600; }
 		@media (max-width: 900px) {
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
@@ -701,6 +867,8 @@ final class DashboardPage
 			.ard-kpi-delta { right: 10px; bottom: 10px; font-size: 19px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
+			.ard-audit-pie { width: 170px; height: 170px; }
+			.ard-audit-legend { min-width: 0; width: 100%; }
 		}
 		</style>';
 	}
@@ -1082,10 +1250,15 @@ final class DashboardPage
 			return __('0 sekund', 'ar-design-reporting');
 		}
 
-		$hours   = (int) floor($seconds / 3600);
+		$days    = (int) floor($seconds / 86400);
+		$hours   = (int) floor(($seconds % 86400) / 3600);
 		$minutes = (int) floor(($seconds % 3600) / 60);
 		$rest    = $seconds % 60;
 		$parts   = array();
+
+		if ($days > 0) {
+			$parts[] = sprintf(__('%d d', 'ar-design-reporting'), $days);
+		}
 
 		if ($hours > 0) {
 			$parts[] = sprintf(__('%d h', 'ar-design-reporting'), $hours);
@@ -1136,6 +1309,54 @@ final class DashboardPage
 		$label = '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login;
 
 		return $label . ' (#' . $user_id . ')';
+	}
+
+	/**
+	 * @param array<string, mixed> $audit_row
+	 */
+	private function formatAuditChangeSummary(array $audit_row): string
+	{
+		$old_data = json_decode((string) ($audit_row['old_value_json'] ?? ''), true);
+		$new_data = json_decode((string) ($audit_row['new_value_json'] ?? ''), true);
+		$old = is_array($old_data) ? $old_data : array();
+		$new = is_array($new_data) ? $new_data : array();
+
+		$old_status = sanitize_key((string) ($old['status'] ?? ''));
+		$new_status = sanitize_key((string) ($new['status'] ?? ''));
+		if ('' !== $old_status || '' !== $new_status) {
+			return $this->formatWorkflowValue('status', $old_status) . ' -> ' . $this->formatWorkflowValue('status', $new_status);
+		}
+
+		$old_owner = isset($old['owner_user_id']) ? (int) $old['owner_user_id'] : 0;
+		$new_owner = isset($new['owner_user_id']) ? (int) $new['owner_user_id'] : 0;
+		if ($old_owner > 0 || $new_owner > 0) {
+			return $this->formatUserLabel($old_owner) . ' -> ' . $this->formatUserLabel($new_owner);
+		}
+
+		if (! empty($old) || ! empty($new)) {
+			$old_text = ! empty($old) ? wp_json_encode($old) : '-';
+			$new_text = ! empty($new) ? wp_json_encode($new) : '-';
+
+			return (string) $old_text . ' -> ' . (string) $new_text;
+		}
+
+		return __('Bez detailu', 'ar-design-reporting');
+	}
+
+	/**
+	 * @param array<string, mixed> $audit_row
+	 */
+	private function formatAuditSourceLabel(array $audit_row): string
+	{
+		$context_data = json_decode((string) ($audit_row['context_json'] ?? ''), true);
+		$context = is_array($context_data) ? $context_data : array();
+		$source = sanitize_key((string) ($context['source'] ?? ''));
+
+		if ('' === $source) {
+			return __('Nevyplněno', 'ar-design-reporting');
+		}
+
+		return $this->formatWorkflowValue('source_trigger', $source);
 	}
 
 	private function resolveOrderNumberLabel(int $order_id): string

@@ -171,6 +171,80 @@ final class ExportManager
 	}
 
 	/**
+	 * @param array<int, array<string, mixed>> $events
+	 */
+	public function streamAuditEventsXlsx(array $events, string $event_type = ''): void
+	{
+		if (! class_exists(\ZipArchive::class)) {
+			wp_die(esc_html__('XLSX export vyžaduje rozšírenie ZipArchive na serveri.', 'ar-design-reporting'));
+		}
+
+		$rows = array();
+		foreach ($events as $event_row) {
+			$order_id = isset($event_row['order_id']) ? (int) $event_row['order_id'] : 0;
+			$order_data = $order_id > 0 ? $this->loadWooOrderData($order_id) : array('order_number' => '');
+			$actor_user_id = isset($event_row['actor_user_id']) ? (int) $event_row['actor_user_id'] : 0;
+
+			$rows[] = array(
+				$this->formatGmtDate((string) ($event_row['created_at_gmt'] ?? '')),
+				$this->formatAuditEventLabel((string) ($event_row['event_type'] ?? '')),
+				$order_id > 0 ? (string) $order_id : '',
+				(string) ($order_data['order_number'] ?? ''),
+				$actor_user_id > 0 ? (string) $actor_user_id : '',
+				$this->resolveUserDisplayName($actor_user_id),
+				$this->formatAuditChangeSummary($event_row),
+				$this->formatAuditSourceLabel($event_row),
+			);
+		}
+
+		$sheet_rows = array();
+		$sheet_rows[] = array(
+			'Čas (GMT)',
+			'Udalost',
+			'ID objednávky',
+			'Číslo objednávky',
+			'ID používateľa',
+			'Používateľ',
+			'Zmena',
+			'Zdroj',
+		);
+		foreach ($rows as $row) {
+			$sheet_rows[] = $row;
+		}
+
+		$temp_file = wp_tempnam('ard-audit-export-xlsx');
+
+		if (! is_string($temp_file) || '' === $temp_file) {
+			wp_die(esc_html__('Nepodarilo sa pripraviť dočasný súbor pre XLSX export.', 'ar-design-reporting'));
+		}
+
+		$zip = new \ZipArchive();
+		$open_result = $zip->open($temp_file, \ZipArchive::OVERWRITE);
+
+		if (true !== $open_result) {
+			wp_die(esc_html__('Nepodarilo sa vytvoriť XLSX export.', 'ar-design-reporting'));
+		}
+
+		$zip->addFromString('[Content_Types].xml', $this->buildXlsxContentTypesXml());
+		$zip->addFromString('_rels/.rels', $this->buildXlsxRootRelsXml());
+		$zip->addFromString('xl/workbook.xml', $this->buildXlsxWorkbookXml());
+		$zip->addFromString('xl/_rels/workbook.xml.rels', $this->buildXlsxWorkbookRelsXml());
+		$zip->addFromString('xl/styles.xml', $this->buildXlsxStylesXml());
+		$zip->addFromString('xl/worksheets/sheet1.xml', $this->buildXlsxSheetXml($sheet_rows));
+		$zip->close();
+
+		nocache_headers();
+		$suffix = '' !== $event_type ? '-' . $event_type : '';
+		$filename = 'ar-design-reporting-audit' . $suffix . '-' . gmdate('Ymd-His') . '.xlsx';
+		header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Content-Length: ' . filesize($temp_file));
+
+		readfile($temp_file);
+		@unlink($temp_file);
+	}
+
+	/**
 	 * @return array<int, string>
 	 */
 	private function getExportColumns(): array
@@ -516,6 +590,124 @@ final class ExportManager
 		}
 
 		return '' !== (string) $user->display_name ? (string) $user->display_name : (string) $user->user_login;
+	}
+
+	private function formatGmtDate(string $raw_value): string
+	{
+		if ('' === $raw_value) {
+			return '';
+		}
+
+		try {
+			$date = new \DateTimeImmutable($raw_value, new \DateTimeZone('UTC'));
+
+			return $date->format('d.m.Y H:i:s');
+		} catch (\Exception $exception) {
+			return $raw_value;
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $audit_row
+	 */
+	private function formatAuditChangeSummary(array $audit_row): string
+	{
+		$old_data = json_decode((string) ($audit_row['old_value_json'] ?? ''), true);
+		$new_data = json_decode((string) ($audit_row['new_value_json'] ?? ''), true);
+		$old = is_array($old_data) ? $old_data : array();
+		$new = is_array($new_data) ? $new_data : array();
+
+		$old_status = sanitize_key((string) ($old['status'] ?? ''));
+		$new_status = sanitize_key((string) ($new['status'] ?? ''));
+		if ('' !== $old_status || '' !== $new_status) {
+			return $this->formatAuditStatusLabel($old_status) . ' -> ' . $this->formatAuditStatusLabel($new_status);
+		}
+
+		$old_owner = isset($old['owner_user_id']) ? (int) $old['owner_user_id'] : 0;
+		$new_owner = isset($new['owner_user_id']) ? (int) $new['owner_user_id'] : 0;
+		if ($old_owner > 0 || $new_owner > 0) {
+			return $this->resolveUserDisplayName($old_owner) . ' -> ' . $this->resolveUserDisplayName($new_owner);
+		}
+
+		if (! empty($old) || ! empty($new)) {
+			$old_text = ! empty($old) ? wp_json_encode($old) : '-';
+			$new_text = ! empty($new) ? wp_json_encode($new) : '-';
+
+			return (string) $old_text . ' -> ' . (string) $new_text;
+		}
+
+		return 'Bez detailu';
+	}
+
+	/**
+	 * @param array<string, mixed> $audit_row
+	 */
+	private function formatAuditSourceLabel(array $audit_row): string
+	{
+		$context_data = json_decode((string) ($audit_row['context_json'] ?? ''), true);
+		$context = is_array($context_data) ? $context_data : array();
+		$source = sanitize_key((string) ($context['source'] ?? ''));
+
+		if ('' === $source) {
+			return '';
+		}
+
+		$labels = array(
+			'woocommerce_new_order'            => 'Automaticky pri vytvorení objednávky',
+			'woocommerce_order_status_changed' => 'Automaticky pri zmene stavu objednávky',
+			'manual_take_over'                 => 'Ručné prevzatie objednávky',
+			'manual_reassign'                  => 'Ručná zmena priradenia objednávky',
+			'manual_packed'                    => 'Ručné označenie objednávky ako zabalená',
+			'manual_fulfillment'               => 'Ručné označenie objednávky ako vybavená',
+			'manual_cancel_instead_delete'     => 'Ručné označenie objednávky ako zrušená',
+		);
+
+		return $labels[$source] ?? $source;
+	}
+
+	private function formatAuditEventLabel(string $event_type): string
+	{
+		$event_type = sanitize_key($event_type);
+		$labels = array(
+			'order_status_changed'          => 'Zmena stavu objednávky',
+			'order_taken_over'              => 'Prevzatie objednávky',
+			'order_owner_reassigned'        => 'Zmena priradenia objednávky',
+			'order_packed'                  => 'Označenie objednávky ako zabalená',
+			'order_fulfilled'               => 'Označenie objednávky ako vybavená',
+			'order_status_set_to_packed'    => 'Nastavenie Woo stavu na Zabalená',
+			'order_status_set_to_fulfilled' => 'Nastavenie Woo stavu na Vybavená',
+			'order_status_applied_after_reassign' => 'Použitie zmeny stavu po zmene priradenia',
+			'order_status_transition_not_allowed' => 'Zablokovaný nepovolený prechod stavov',
+			'order_cancelled_restore_not_allowed' => 'Zamietnutá obnova zo Zrušená',
+			'order_action_blocked_owner_mismatch' => 'Zablokovaná akcia: objednávka priradená inému používateľovi',
+			'order_marked_cancelled'        => 'Označenie objednávky ako Zrušená',
+			'order_delete_attempt_blocked'  => 'Zablokovaný pokus o zmazanie alebo kôš',
+			'order_failed_transition_blocked' => 'Zablokovaný prechod na Neúspešná',
+			'order_permanent_delete_blocked'  => 'Zablokované trvalé zmazanie objednávky',
+			'order_archived_before_delete'  => 'Archivácia objednávky pred zmazaním',
+		);
+
+		return $labels[$event_type] ?? $event_type;
+	}
+
+	private function formatAuditStatusLabel(string $status): string
+	{
+		$status = sanitize_key($status);
+		$labels = array(
+			'new'          => 'Nová',
+			'pending'      => 'Čaká sa na platbu',
+			'processing'   => 'Spracováva sa',
+			'on-hold'      => 'Pozastavená',
+			'na-odoslanie' => 'Na odoslanie',
+			'zabalena'     => 'Zabalená',
+			'vybavena'     => 'Vybavená',
+			'failed'       => 'Neúspešná',
+			'cancelled'    => 'Zrušená',
+			'refunded'     => 'Refundovaná',
+			'completed'    => 'Vybavená',
+		);
+
+		return $labels[$status] ?? $status;
 	}
 
 	private function isValidIsoDate( string $value ): bool

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.17 - 2026-04-27
+
+- auditný prehľad doplnený o koláčový graf s legendou všetkých udalostí v aktuálnom filtri
+- počet udalostí v auditnom prehľade je klikateľný a otvára detailné zobrazenie aktuálnych udalostí
+- v detaile auditných udalostí je dostupný XLSX export s ľudskými názvami stĺpcov
+- v prehľade objednávok je rozšírené formátovanie času vrátane dní (napr. `2 d 12 h 45 min 15 s`)
+
 ## 0.3.16 - 2026-04-27
 
 - XLSX export má nově lidské názvy sloupců pro lepší čitelnost mimo technický tým

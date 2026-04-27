@@ -117,7 +117,7 @@ final class DashboardQueryService
 			'hpos_enabled'   => $this->compatibility->isHposEnabled(),
 			'orders_overview' => $orders_overview,
 			'employee_overview' => $this->order_processing_repository->getEmployeePerformanceRows($filters, 50),
-			'audit_overview' => $this->audit_log_repository->getEventTypeSummary($filters, 20),
+			'audit_overview' => $this->audit_log_repository->getEventTypeSummary($filters, 200),
 		);
 	}
 
@@ -185,6 +185,15 @@ final class DashboardQueryService
 		}
 
 		return $timeline;
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getRecentAuditEvents(array $filters = array(), string $event_type = '', int $limit = 100): array
+	{
+		return $this->audit_log_repository->getRecentEvents($filters, $event_type, $limit);
 	}
 
 	private function calculateSecondsDiff(string $from_gmt, string $to_gmt): int

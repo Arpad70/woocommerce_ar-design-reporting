@@ -6,6 +6,7 @@ namespace ArDesign\Reporting\Presentation\Admin;
 
 use ArDesign\Reporting\Application\Emails\EmailReporter;
 use ArDesign\Reporting\Application\Exports\ExportManager;
+use ArDesign\Reporting\Application\Reports\DashboardQueryService;
 use ArDesign\Reporting\Domain\Processing\ProcessingService;
 
 final class WorkflowActions
@@ -16,15 +17,19 @@ final class WorkflowActions
 
 	private EmailReporter $email_reporter;
 
+	private DashboardQueryService $dashboard_query_service;
+
 	public function __construct(
 		ProcessingService $processing_service,
 		ExportManager $export_manager,
-		EmailReporter $email_reporter
+		EmailReporter $email_reporter,
+		DashboardQueryService $dashboard_query_service
 	)
 	{
 		$this->processing_service = $processing_service;
 		$this->export_manager     = $export_manager;
 		$this->email_reporter     = $email_reporter;
+		$this->dashboard_query_service = $dashboard_query_service;
 	}
 
 	public function register(): void
@@ -35,6 +40,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_mark_order_cancelled', array($this, 'handleMarkOrderCancelled'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
 		add_action('admin_post_ard_export_xlsx', array($this, 'handleExportXlsx'));
+		add_action('admin_post_ard_export_audit_xlsx', array($this, 'handleExportAuditXlsx'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
 		add_action('admin_post_ard_send_digest_now', array($this, 'handleSendDigestNow'));
 	}
@@ -122,6 +128,19 @@ final class WorkflowActions
 		$raw_filters = wp_unslash($_POST);
 		$filters = $this->export_manager->normalizeFilters(is_array($raw_filters) ? $raw_filters : array());
 		$this->export_manager->streamProcessingXlsx($filters);
+		exit;
+	}
+
+	public function handleExportAuditXlsx(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_export_audit_xlsx');
+
+		$raw_filters = wp_unslash($_POST);
+		$filters = $this->export_manager->normalizeFilters(is_array($raw_filters) ? $raw_filters : array());
+		$event_type = isset($raw_filters['audit_event_type']) ? sanitize_key((string) $raw_filters['audit_event_type']) : '';
+		$events = $this->dashboard_query_service->getRecentAuditEvents($filters, $event_type, 1000);
+		$this->export_manager->streamAuditEventsXlsx($events, $event_type);
 		exit;
 	}
 

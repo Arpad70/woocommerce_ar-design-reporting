@@ -137,7 +137,8 @@ final class ServiceProvider
 			static fn ( Container $c ): WorkflowActions => new WorkflowActions(
 				$c->get( ProcessingService::class ),
 				$c->get( ExportManager::class ),
-				$c->get( EmailReporter::class )
+				$c->get( EmailReporter::class ),
+				$c->get( DashboardQueryService::class )
 			)
 		);
 		$container->set( OrderHooks::class, static fn ( Container $c ): OrderHooks => new OrderHooks( $c->get( ProcessingService::class ) ) );

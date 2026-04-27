@@ -178,6 +178,44 @@ class AuditLogRepository
 	}
 
 	/**
+	 * @param array<string, string> $filters
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getRecentEvents(array $filters = array(), string $event_type = '', int $limit = 100): array
+	{
+		global $wpdb;
+
+		$limit = max(1, min(500, $limit));
+		$table = $this->tables->auditLog();
+		$where_parts = array();
+		$params = array();
+		$this->appendDateRangeFilter($where_parts, $params, $filters);
+
+		$event_type = sanitize_key($event_type);
+		if ('' !== $event_type) {
+			$where_parts[] = 'event_type = %s';
+			$params[] = $event_type;
+		}
+
+		$sql = "SELECT id, event_type, order_id, actor_user_id, old_value_json, new_value_json, context_json, created_at_gmt
+			FROM {$table}";
+
+		if (! empty($where_parts)) {
+			$sql .= ' WHERE ' . implode(' AND ', $where_parts);
+		}
+
+		$sql .= ' ORDER BY id DESC LIMIT ' . $limit;
+
+		if (! empty($params)) {
+			$sql = $wpdb->prepare($sql, $params);
+		}
+
+		$rows = $wpdb->get_results($sql, ARRAY_A);
+
+		return is_array($rows) ? $rows : array();
+	}
+
+	/**
 	 * @param array<int, string> $where_parts
 	 * @param array<int, string> $params
 	 * @param array<string, string> $filters
