@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.14 - 2026-04-27
+
+- odstránená logika manažéra procesu vrátane fallbackov a dashboard sekcií naviazaných na manažéra
+- workflow prechody medzi stavmi sú uvoľnené bez pevnej prechodovej matice
+- pri zmene stavu iným používateľom sa objednávka automaticky najprv priradí aktérovi a až následne sa vykoná zmena stavu
+- audit je rozšírený o konzistentné záznamy automatického prepriradenia pred zmenou stavu
+- aktualizovaný prevádzkový manuál podľa rolí na nový workflow bez manažéra
+
 ## 0.3.13 - 2026-04-25
 
 - hláška porovnávacieho obdobia v KPI snapshote zobrazuje dátumy v českom formáte (dd.mm.rrrr)

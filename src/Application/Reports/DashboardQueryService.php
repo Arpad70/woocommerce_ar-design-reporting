@@ -75,8 +75,7 @@ final class DashboardQueryService
 		}
 
 		$orders_overview = array();
-		$manager_ready_seconds = array();
-		$manager_map = array();
+		$ready_seconds_values = array();
 		foreach ($order_rows as $row) {
 			$order_id = (int) ($row['order_id'] ?? 0);
 			$last_change = $last_change_map[$order_id] ?? array();
@@ -84,21 +83,14 @@ final class DashboardQueryService
 			$created_at_gmt = (string) ($row['created_at_gmt'] ?? '');
 			$ready_at_gmt = (string) ($ready_event['created_at_gmt'] ?? '');
 			$ready_seconds = $this->calculateSecondsDiff($created_at_gmt, $ready_at_gmt);
-			$manager_user_id = $this->resolveOrderManagerUserId($order_id);
 
-			if ($manager_user_id > 0 && $ready_seconds > 0) {
-				if (! isset($manager_ready_seconds[$manager_user_id])) {
-					$manager_ready_seconds[$manager_user_id] = array();
-				}
-
-				$manager_ready_seconds[$manager_user_id][] = $ready_seconds;
-				$manager_map[$manager_user_id] = true;
+			if ($ready_seconds > 0) {
+				$ready_seconds_values[] = $ready_seconds;
 			}
 
 			$orders_overview[] = array(
 				'order_id'                  => $order_id,
 				'owner_user_id'             => (int) ($row['owner_user_id'] ?? 0),
-				'manager_user_id'           => $manager_user_id,
 				'classification'            => (string) ($row['classification'] ?? ''),
 				'status'                    => (string) ($row['status'] ?? ''),
 				'processing_seconds'        => isset($row['processing_seconds']) ? (int) $row['processing_seconds'] : null,
@@ -111,12 +103,9 @@ final class DashboardQueryService
 			);
 		}
 
-		$default_manager_user_id = (int) get_option('ard_reporting_default_manager_user_id', 0);
-		$default_manager_avg_ready_seconds = $this->calculateManagerAverageReadySeconds($manager_ready_seconds, $default_manager_user_id);
-		$overall_avg_ready_seconds = $this->calculateOverallAverageReadySeconds($manager_ready_seconds);
-		$manager_performance = $this->buildManagerPerformanceRows($manager_ready_seconds, array_keys($manager_map));
+		$overall_avg_ready_seconds = $this->calculateOverallAverageReadySeconds($ready_seconds_values);
 
-		$current_kpis = $this->kpi_calculator->getOverview($filters, $default_manager_avg_ready_seconds, $overall_avg_ready_seconds);
+		$current_kpis = $this->kpi_calculator->getOverview($filters, $overall_avg_ready_seconds);
 		$compare_kpis = $this->kpi_calculator->getOverview($compare_filters);
 
 		return array(
@@ -129,8 +118,6 @@ final class DashboardQueryService
 			'orders_overview' => $orders_overview,
 			'employee_overview' => $this->order_processing_repository->getEmployeePerformanceRows($filters, 50),
 			'audit_overview' => $this->audit_log_repository->getEventTypeSummary($filters, 20),
-			'manager_performance' => $manager_performance,
-			'default_manager_user_id' => $default_manager_user_id,
 		);
 	}
 
@@ -200,20 +187,6 @@ final class DashboardQueryService
 		return $timeline;
 	}
 
-	private function resolveOrderManagerUserId(int $order_id): int
-	{
-		if ($order_id <= 0 || ! function_exists('wc_get_order')) {
-			return 0;
-		}
-
-		$order = wc_get_order($order_id);
-		if (! $order instanceof \WC_Order) {
-			return 0;
-		}
-
-		return (int) $order->get_meta('_ard_manager_user_id', true);
-	}
-
 	private function calculateSecondsDiff(string $from_gmt, string $to_gmt): int
 	{
 		if ('' === $from_gmt || '' === $to_gmt) {
@@ -232,64 +205,14 @@ final class DashboardQueryService
 	}
 
 	/**
-	 * @param array<int, array<int, int>> $manager_ready_seconds
+	 * @param array<int, int> $ready_seconds_values
 	 */
-	private function calculateManagerAverageReadySeconds(array $manager_ready_seconds, int $manager_user_id): float
+	private function calculateOverallAverageReadySeconds(array $ready_seconds_values): float
 	{
-		if ($manager_user_id <= 0 || ! isset($manager_ready_seconds[$manager_user_id])) {
+		if (empty($ready_seconds_values)) {
 			return 0.0;
 		}
 
-		$values = $manager_ready_seconds[$manager_user_id];
-
-		if (empty($values)) {
-			return 0.0;
-		}
-
-		return (float) (array_sum($values) / count($values));
-	}
-
-	/**
-	 * @param array<int, array<int, int>> $manager_ready_seconds
-	 */
-	private function calculateOverallAverageReadySeconds(array $manager_ready_seconds): float
-	{
-		$all = array();
-
-		foreach ($manager_ready_seconds as $values) {
-			foreach ($values as $seconds) {
-				$all[] = (int) $seconds;
-			}
-		}
-
-		if (empty($all)) {
-			return 0.0;
-		}
-
-		return (float) (array_sum($all) / count($all));
-	}
-
-	/**
-	 * @param array<int, array<int, int>> $manager_ready_seconds
-	 * @param array<int, int|string> $manager_ids
-	 * @return array<int, array<string, mixed>>
-	 */
-	private function buildManagerPerformanceRows(array $manager_ready_seconds, array $manager_ids): array
-	{
-		$rows = array();
-
-		foreach ($manager_ids as $manager_id) {
-			$user_id = (int) $manager_id;
-			$values = $manager_ready_seconds[$user_id] ?? array();
-			$avg_seconds = ! empty($values) ? (float) (array_sum($values) / count($values)) : 0.0;
-
-			$rows[] = array(
-				'manager_user_id' => $user_id,
-				'orders_count'    => count($values),
-				'avg_ready_seconds' => $avg_seconds,
-			);
-		}
-
-		return $rows;
+		return (float) (array_sum($ready_seconds_values) / count($ready_seconds_values));
 	}
 }
