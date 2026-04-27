@@ -338,6 +338,44 @@ class OrderProcessingRepository
 	}
 
 	/**
+	 * @param array<int, int> $order_ids
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function getRowsByOrderIds(array $order_ids): array
+	{
+		global $wpdb;
+
+		$order_ids = array_values(array_filter(array_map('absint', $order_ids)));
+		if (empty($order_ids)) {
+			return array();
+		}
+
+		$table = $this->tables->orderProcessing();
+		$ids_sql = implode(',', $order_ids);
+		$rows = $wpdb->get_results(
+			"SELECT order_id, owner_user_id, classification, status, is_kpi_included, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, created_at_gmt, updated_at_gmt
+			FROM {$table}
+			WHERE order_id IN ({$ids_sql})",
+			ARRAY_A
+		);
+
+		if (! is_array($rows)) {
+			return array();
+		}
+
+		$mapped = array();
+		foreach ($rows as $row) {
+			$order_id = isset($row['order_id']) ? absint((string) $row['order_id']) : 0;
+			if ($order_id <= 0) {
+				continue;
+			}
+			$mapped[$order_id] = is_array($row) ? $row : array();
+		}
+
+		return $mapped;
+	}
+
+	/**
 	 * @param array<int, string> $where_parts
 	 * @param array<int, string> $params
 	 * @param array<string, string> $filters

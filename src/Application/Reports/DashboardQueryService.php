@@ -47,12 +47,8 @@ final class DashboardQueryService
 	 */
 	public function getDashboardData(array $filters = array(), array $compare_filters = array()): array
 	{
-		$order_rows = $this->order_processing_repository->getOrderRowsForDashboard($filters, 5000);
-		$order_ids  = array();
-
-		foreach ($order_rows as $row) {
-			$order_ids[] = (int) ($row['order_id'] ?? 0);
-		}
+		$order_ids = $this->getOrderIdsForOverview($filters, 5000);
+		$order_rows_map = $this->order_processing_repository->getRowsByOrderIds($order_ids);
 
 		$last_status_changes = $this->audit_log_repository->getLatestStatusChangeByOrderIds($order_ids);
 		$status_change_events = $this->audit_log_repository->getStatusChangeEventsByOrderIds($order_ids);
@@ -76,11 +72,35 @@ final class DashboardQueryService
 
 		$orders_overview = array();
 		$ready_seconds_values = array();
-		foreach ($order_rows as $row) {
-			$order_id = (int) ($row['order_id'] ?? 0);
+		$classification_filter = (string) ($filters['classification'] ?? '');
+		$kpi_included_filter = (string) ($filters['kpi_included'] ?? '');
+
+		foreach ($order_ids as $order_id) {
+			$order = function_exists('wc_get_order') ? wc_get_order($order_id) : null;
+			if (! $order) {
+				continue;
+			}
+
+			$row = $order_rows_map[$order_id] ?? array();
+			$classification = sanitize_key((string) ($row['classification'] ?? ''));
+			$is_kpi_included = isset($row['is_kpi_included']) ? (int) $row['is_kpi_included'] : 0;
+			if ('' !== $classification_filter && $classification !== $classification_filter) {
+				continue;
+			}
+			if ('1' === $kpi_included_filter && 1 !== $is_kpi_included) {
+				continue;
+			}
+			if ('0' === $kpi_included_filter && 1 === $is_kpi_included) {
+				continue;
+			}
+
 			$last_change = $last_change_map[$order_id] ?? array();
 			$ready_event = $first_ready_map[$order_id] ?? array();
-			$created_at_gmt = (string) ($row['created_at_gmt'] ?? '');
+			$created_at_gmt = '';
+			$created_at_obj = $order->get_date_created();
+			if ($created_at_obj instanceof \WC_DateTime) {
+				$created_at_gmt = gmdate('Y-m-d H:i:s', $created_at_obj->getTimestamp());
+			}
 			$ready_at_gmt = (string) ($ready_event['created_at_gmt'] ?? '');
 			$ready_seconds = $this->calculateSecondsDiff($created_at_gmt, $ready_at_gmt);
 
@@ -91,14 +111,14 @@ final class DashboardQueryService
 			$orders_overview[] = array(
 				'order_id'                  => $order_id,
 				'owner_user_id'             => (int) ($row['owner_user_id'] ?? 0),
-				'classification'            => (string) ($row['classification'] ?? ''),
-				'status'                    => (string) ($row['status'] ?? ''),
+				'classification'            => $classification,
+				'status'                    => sanitize_key((string) $order->get_status()),
 				'is_kpi_included'           => isset($row['is_kpi_included']) ? (int) $row['is_kpi_included'] : 0,
 				'processing_seconds'        => isset($row['processing_seconds']) ? (int) $row['processing_seconds'] : null,
 				'created_at_gmt'            => $created_at_gmt,
 				'ready_for_packing_at_gmt'  => $ready_at_gmt,
 				'ready_for_packing_seconds' => $ready_seconds > 0 ? $ready_seconds : null,
-				'updated_at_gmt'            => (string) ($row['updated_at_gmt'] ?? ''),
+				'updated_at_gmt'            => (string) ($row['updated_at_gmt'] ?? $created_at_gmt),
 				'last_status_change_actor'  => isset($last_change['actor_user_id']) ? (int) $last_change['actor_user_id'] : 0,
 				'last_status_change_at_gmt' => (string) ($last_change['created_at_gmt'] ?? ''),
 			);
@@ -120,6 +140,41 @@ final class DashboardQueryService
 			'employee_overview' => $this->order_processing_repository->getEmployeePerformanceRows($filters, 50),
 			'audit_overview' => $this->audit_log_repository->getEventTypeSummary($filters, 200),
 		);
+	}
+
+	/**
+	 * @param array<string, string> $filters
+	 * @return array<int, int>
+	 */
+	private function getOrderIdsForOverview(array $filters, int $limit = 5000): array
+	{
+		if (! function_exists('wc_get_orders') || ! function_exists('wc_get_order_statuses')) {
+			return array();
+		}
+
+		$status_filter = (string) ($filters['status'] ?? '');
+		$args = array(
+			'limit'   => max(1, min(5000, $limit)),
+			'return'  => 'ids',
+			'orderby' => 'date',
+			'order'   => 'DESC',
+			'status'  => '' !== $status_filter ? array($status_filter) : array_keys(wc_get_order_statuses()),
+		);
+
+		$from = (string) ($filters['date_from'] ?? '');
+		$to   = (string) ($filters['date_to'] ?? '');
+
+		if ('' !== $from && '' !== $to) {
+			$args['date_created'] = $from . '...' . $to . ' 23:59:59';
+		} elseif ('' !== $from) {
+			$args['date_created'] = '>=' . $from;
+		} elseif ('' !== $to) {
+			$args['date_created'] = '<=' . $to . ' 23:59:59';
+		}
+
+		$order_ids = wc_get_orders($args);
+
+		return is_array($order_ids) ? array_values(array_filter(array_map('absint', $order_ids))) : array();
 	}
 
 	/**
