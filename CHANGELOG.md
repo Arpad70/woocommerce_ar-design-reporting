@@ -1,3 +1,10 @@
+## 0.3.26 - 2026-04-27
+
+- produktový reporting bol oddelený do samostatného plugin modulu `ar-design-reporting-products-module`
+- core dashboard reportingu rozšírený o hook `ard_reporting_dashboard_after_orders` pre bezpečné vkladanie externých modulov
+- release pipeline teraz publikuje aj samostatný balíček `ar-design-reporting-products-module.zip`
+- modul obsahuje vlastný updater z GitHub release assetu, takže je možné samostatné aktualizovanie modulu
+
 # Changelog
 
 ## 0.3.17 - 2026-04-27

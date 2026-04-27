@@ -287,12 +287,30 @@ final class DashboardPage
 		echo '<label class="ard-orders-overview-page-size">';
 		echo '<span>' . esc_html__('Na stránku', 'ar-design-reporting') . ':</span>';
 		echo '<select data-page-size>';
-		echo '<option value="10" selected>10</option>';
+		echo '<option value="5" selected>5</option>';
+		echo '<option value="10">10</option>';
 		echo '<option value="20">20</option>';
 		echo '<option value="50">50</option>';
 		echo '</select>';
 		echo '</label>';
 		echo '</div>';
+		do_action(
+			'ard_reporting_dashboard_after_orders',
+			array(
+				'filters' => $dashboard_filters,
+				'compare_filters' => $compare_filters,
+				'query_args' => array(
+					'status' => $export_status,
+					'classification' => $export_classification,
+					'kpi_included' => $export_kpi_included,
+					'date_from' => $export_date_from,
+					'date_to' => $export_date_to,
+					'compare_date_from' => $compare_date_from,
+					'compare_date_to' => $compare_date_to,
+				),
+				'admin_base_args' => $audit_filter_base_args,
+			)
+		);
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Výkon zamestnancov', 'ar-design-reporting') . '</h2>';
 		echo '<table class="widefat striped" style="max-width:960px;">';
@@ -1163,9 +1181,9 @@ final class DashboardPage
 				}
 
 				function renderPage() {
-					var pageSize = parseInt(pageSizeSelect.value || "10", 10);
+					var pageSize = parseInt(pageSizeSelect.value || "5", 10);
 					if (!pageSize || pageSize < 1) {
-						pageSize = 10;
+						pageSize = 5;
 					}
 
 					var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
@@ -1202,7 +1220,7 @@ final class DashboardPage
 
 				if (nextBtn) {
 					nextBtn.addEventListener("click", function () {
-						var pageSize = parseInt(pageSizeSelect.value || "10", 10) || 10;
+						var pageSize = parseInt(pageSizeSelect.value || "5", 10) || 5;
 						var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
 						if (currentPage < totalPages) {
 							currentPage += 1;
@@ -1329,6 +1347,7 @@ final class DashboardPage
 				{ key: "workflow", title: "Workflow a audit", sectionTitles: ["Workflow detail objednávky", "Auditný prehľad", "Posledné archivácie zmazaných objednávok"] },
 				{ key: "ops", title: "Nastavenia a export", sectionTitles: ["Export", "Reporting tabulky", "Připravené moduly", "Workflow akce", "Ďalší krok"] }
 			];
+			var consumedTitles = {};
 
 			var ordersNodes = blocks["Prehľad objednávok"] || null;
 			var ordersPanel = null;
@@ -1369,6 +1388,7 @@ final class DashboardPage
 					if (!sectionNodes || !sectionNodes.length) {
 						return;
 					}
+					consumedTitles[sectionTitle] = true;
 					found = true;
 					var subsection = document.createElement("div");
 					subsection.className = "ard-subsection";
@@ -1405,6 +1425,40 @@ final class DashboardPage
 			if (ordersPanel) {
 				root.appendChild(ordersPanel);
 			}
+
+			var pluginPanel = document.createElement("section");
+			pluginPanel.className = "ard-panel ard-panel-modules";
+			var pluginTitle = document.createElement("h2");
+			pluginTitle.className = "ard-panel-title";
+			pluginTitle.textContent = "Rozšírenia";
+			pluginPanel.appendChild(pluginTitle);
+			var hasPluginSections = false;
+			Object.keys(blocks).forEach(function (title) {
+				if (title === "Prehľad objednávok" || consumedTitles[title]) {
+					return;
+				}
+				var sectionNodes = blocks[title];
+				if (!sectionNodes || !sectionNodes.length) {
+					return;
+				}
+				hasPluginSections = true;
+				var subsection = document.createElement("div");
+				subsection.className = "ard-subsection";
+				var label = document.createElement("h3");
+				label.textContent = title;
+				subsection.appendChild(label);
+				sectionNodes.forEach(function (node, index) {
+					if (index === 0) {
+						return;
+					}
+					subsection.appendChild(node);
+				});
+				pluginPanel.appendChild(subsection);
+			});
+			if (hasPluginSections) {
+				grid.appendChild(pluginPanel);
+			}
+
 			root.appendChild(grid);
 			initOrdersOverviewPagination();
 			initAuditEventsPagination();
