@@ -197,6 +197,18 @@ class AuditLogRepository
 			$params[] = $event_type;
 		}
 
+		$order_id = isset($filters['order_id']) ? absint((string) $filters['order_id']) : 0;
+		if ($order_id > 0) {
+			$where_parts[] = 'order_id = %d';
+			$params[] = $order_id;
+		}
+
+		$actor_user_id = isset($filters['actor_user_id']) ? absint((string) $filters['actor_user_id']) : 0;
+		if ($actor_user_id > 0) {
+			$where_parts[] = 'actor_user_id = %d';
+			$params[] = $actor_user_id;
+		}
+
 		$sql = "SELECT id, event_type, order_id, actor_user_id, old_value_json, new_value_json, context_json, created_at_gmt
 			FROM {$table}";
 

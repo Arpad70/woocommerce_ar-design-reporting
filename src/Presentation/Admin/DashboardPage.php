@@ -114,7 +114,17 @@ final class DashboardPage
 		$employee_overview = is_array($data['employee_overview'] ?? null) ? $data['employee_overview'] : array();
 		$audit_overview = is_array($data['audit_overview'] ?? null) ? $data['audit_overview'] : array();
 		$selected_audit_event_type = isset($_GET['audit_event_type']) ? sanitize_key(wp_unslash($_GET['audit_event_type'])) : '';
-		$recent_audit_events = $this->dashboard_query_service->getRecentAuditEvents($dashboard_filters, $selected_audit_event_type, 100);
+		$audit_order_id = isset($_GET['audit_order_id']) ? absint(wp_unslash($_GET['audit_order_id'])) : 0;
+		$audit_user_id = isset($_GET['audit_user_id']) ? absint(wp_unslash($_GET['audit_user_id'])) : 0;
+		$audit_date_from = isset($_GET['audit_date_from']) ? sanitize_text_field(wp_unslash($_GET['audit_date_from'])) : $export_date_from;
+		$audit_date_to = isset($_GET['audit_date_to']) ? sanitize_text_field(wp_unslash($_GET['audit_date_to'])) : $export_date_to;
+		$audit_filters = array(
+			'date_from'     => $audit_date_from,
+			'date_to'       => $audit_date_to,
+			'order_id'      => (string) $audit_order_id,
+			'actor_user_id' => (string) $audit_user_id,
+		);
+		$recent_audit_events = $this->dashboard_query_service->getRecentAuditEvents($audit_filters, $selected_audit_event_type, 1000);
 		$sample_order = isset($_GET['order_id']) ? absint(wp_unslash($_GET['order_id'])) : 0;
 		$workflow     = $sample_order > 0 ? $this->processing_service->getWorkflowSummary($sample_order) : array();
 		$timeline     = $sample_order > 0 ? $this->dashboard_query_service->getOrderTimeline($sample_order) : array();
@@ -128,6 +138,10 @@ final class DashboardPage
 			'date_to'           => $export_date_to,
 			'compare_date_from' => $compare_date_from,
 			'compare_date_to'   => $compare_date_to,
+			'audit_order_id'    => $audit_order_id > 0 ? (string) $audit_order_id : '',
+			'audit_user_id'     => $audit_user_id > 0 ? (string) $audit_user_id : '',
+			'audit_date_from'   => $audit_date_from,
+			'audit_date_to'     => $audit_date_to,
 		);
 
 		echo '<div class="wrap">';
@@ -332,7 +346,29 @@ final class DashboardPage
 				)
 			) . ' <a href="' . esc_url(add_query_arg($audit_filter_base_args, admin_url('admin.php')) . '#ard-audit-events-table') . '">' . esc_html__('(zobraziť všetky)', 'ar-design-reporting') . '</a></p>';
 		}
-		echo '<table class="widefat striped" style="max-width:1200px;">';
+		echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:12px;max-width:1200px;margin-bottom:10px;">';
+		echo '<input type="hidden" name="page" value="ar-design-reporting" />';
+		echo '<input type="hidden" name="status" value="' . esc_attr($export_status) . '" />';
+		echo '<input type="hidden" name="classification" value="' . esc_attr($export_classification) . '" />';
+		echo '<input type="hidden" name="date_from" value="' . esc_attr($export_date_from) . '" />';
+		echo '<input type="hidden" name="date_to" value="' . esc_attr($export_date_to) . '" />';
+		echo '<input type="hidden" name="compare_date_from" value="' . esc_attr($compare_date_from) . '" />';
+		echo '<input type="hidden" name="compare_date_to" value="' . esc_attr($compare_date_to) . '" />';
+		echo '<input type="hidden" name="audit_event_type" value="' . esc_attr($selected_audit_event_type) . '" />';
+		echo '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">';
+		echo '<p style="margin:0;"><label for="ard-audit-order-id">' . esc_html__('Objednávka (ID)', 'ar-design-reporting') . '</label><br /><input id="ard-audit-order-id" type="number" min="1" name="audit_order_id" value="' . esc_attr($audit_order_id > 0 ? (string) $audit_order_id : '') . '" class="regular-text" /></p>';
+		echo '<p style="margin:0;"><label for="ard-audit-user-id">' . esc_html__('Používateľ (ID)', 'ar-design-reporting') . '</label><br /><input id="ard-audit-user-id" type="number" min="1" name="audit_user_id" value="' . esc_attr($audit_user_id > 0 ? (string) $audit_user_id : '') . '" class="regular-text" /></p>';
+		echo '<p style="margin:0;"><label for="ard-audit-date-from">' . esc_html__('Audit od', 'ar-design-reporting') . '</label><br /><input id="ard-audit-date-from" type="date" name="audit_date_from" value="' . esc_attr($audit_date_from) . '" class="regular-text" /></p>';
+		echo '<p style="margin:0;"><label for="ard-audit-date-to">' . esc_html__('Audit do', 'ar-design-reporting') . '</label><br /><input id="ard-audit-date-to" type="date" name="audit_date_to" value="' . esc_attr($audit_date_to) . '" class="regular-text" /></p>';
+		echo '<p style="margin:0;">';
+		echo '<button type="submit" class="button button-secondary">' . esc_html__('Filtrovať audit', 'ar-design-reporting') . '</button> ';
+		echo '<a class="button" href="' . esc_url(add_query_arg(array_merge($audit_filter_base_args, array('audit_order_id' => '', 'audit_user_id' => '', 'audit_date_from' => $export_date_from, 'audit_date_to' => $export_date_to)), admin_url('admin.php')) . '#ard-audit-events-table') . '">' . esc_html__('Reset', 'ar-design-reporting') . '</a>';
+		echo '</p>';
+		echo '</div>';
+		echo '</form>';
+
+		echo '<div class="ard-audit-events-wrap">';
+		echo '<table id="ard-audit-events-table-grid" class="widefat striped ard-audit-events-table" style="max-width:1200px;">';
 		echo '<thead><tr><th>' . esc_html__('Čas (GMT)', 'ar-design-reporting') . '</th><th>' . esc_html__('Udalosť', 'ar-design-reporting') . '</th><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Používateľ', 'ar-design-reporting') . '</th><th>' . esc_html__('Zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Zdroj', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
@@ -346,7 +382,7 @@ final class DashboardPage
 					? '<a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html($order_label) . '</a>'
 					: esc_html($order_label);
 
-				echo '<tr>';
+				echo '<tr class="ard-audit-events-row">';
 				echo '<td>' . esc_html($this->formatGmtDate((string) ($audit_event_row['created_at_gmt'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatAuditEventLabel((string) ($audit_event_row['event_type'] ?? ''))) . '</td>';
 				echo '<td>' . $order_cell . '</td>';
@@ -359,13 +395,30 @@ final class DashboardPage
 
 		echo '</tbody>';
 		echo '</table>';
+		echo '</div>';
+		echo '<div class="ard-audit-events-pagination" aria-label="' . esc_attr__('Stránkovanie auditných udalostí', 'ar-design-reporting') . '">';
+		echo '<button type="button" class="button" data-audit-page-action="prev">' . esc_html__('Predchádzajúca', 'ar-design-reporting') . '</button>';
+		echo '<span class="ard-audit-events-page-info" data-audit-page-info></span>';
+		echo '<button type="button" class="button" data-audit-page-action="next">' . esc_html__('Ďalšia', 'ar-design-reporting') . '</button>';
+		echo '<label class="ard-audit-events-page-size">';
+		echo '<span>' . esc_html__('Na stránku', 'ar-design-reporting') . ':</span>';
+		echo '<select data-audit-page-size>';
+		echo '<option value="5" selected>5</option>';
+		echo '<option value="10">10</option>';
+		echo '<option value="20">20</option>';
+		echo '<option value="50">50</option>';
+		echo '</select>';
+		echo '</label>';
+		echo '</div>';
 		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:10px;background:#fff;border:1px solid #dcdcde;padding:12px;max-width:1200px;">';
 		wp_nonce_field('ard_export_audit_xlsx');
 		echo '<input type="hidden" name="action" value="ard_export_audit_xlsx" />';
 		echo '<input type="hidden" name="status" value="' . esc_attr($export_status) . '" />';
 		echo '<input type="hidden" name="classification" value="' . esc_attr($export_classification) . '" />';
-		echo '<input type="hidden" name="date_from" value="' . esc_attr($export_date_from) . '" />';
-		echo '<input type="hidden" name="date_to" value="' . esc_attr($export_date_to) . '" />';
+		echo '<input type="hidden" name="date_from" value="' . esc_attr($audit_date_from) . '" />';
+		echo '<input type="hidden" name="date_to" value="' . esc_attr($audit_date_to) . '" />';
+		echo '<input type="hidden" name="audit_order_id" value="' . esc_attr($audit_order_id > 0 ? (string) $audit_order_id : '') . '" />';
+		echo '<input type="hidden" name="audit_user_id" value="' . esc_attr($audit_user_id > 0 ? (string) $audit_user_id : '') . '" />';
 		echo '<input type="hidden" name="audit_event_type" value="' . esc_attr($selected_audit_event_type) . '" />';
 		echo '<button type="submit" class="button button-secondary">' . esc_html__('Exportovať auditné udalosti (XLSX)', 'ar-design-reporting') . '</button>';
 		echo '</form>';
@@ -859,6 +912,26 @@ final class DashboardPage
 		.ard-audit-legend-color { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(15,23,42,.08); }
 		.ard-audit-legend-label { color: #334155; }
 		.ard-audit-legend-count { color: #0f172a; font-weight: 600; }
+		.ard-audit-events-wrap { max-width: 100%; overflow-x: auto; border-radius: 12px; }
+		.ard-audit-events-table { width: 100%; min-width: 980px; table-layout: fixed; font-size: 13px; }
+		.ard-audit-events-table td,
+		.ard-audit-events-table th {
+			white-space: normal;
+			overflow-wrap: anywhere;
+			word-break: break-word;
+			line-height: 1.35;
+		}
+		.ard-audit-events-pagination {
+			display: flex;
+			gap: 10px;
+			align-items: center;
+			justify-content: flex-end;
+			margin-top: 10px;
+			flex-wrap: wrap;
+		}
+		.ard-audit-events-page-info { color: #475569; font-size: 12px; min-width: 170px; text-align: center; }
+		.ard-audit-events-page-size { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 12px; }
+		.ard-audit-events-page-size select { min-height: 30px; }
 		@media (max-width: 900px) {
 			.ard-pro-grid { grid-template-columns: 1fr; }
 			.ard-reporting-dashboard .widefat { font-size: 12px; }
@@ -867,6 +940,8 @@ final class DashboardPage
 			.ard-kpi-delta { right: 10px; bottom: 10px; font-size: 19px; }
 			.ard-orders-overview-table { min-width: 840px; font-size: 12px; }
 			.ard-orders-overview-pagination { justify-content: flex-start; }
+			.ard-audit-events-table { min-width: 840px; font-size: 12px; }
+			.ard-audit-events-pagination { justify-content: flex-start; }
 			.ard-audit-pie { width: 170px; height: 170px; }
 			.ard-audit-legend { min-width: 0; width: 100%; }
 		}
@@ -966,9 +1041,93 @@ final class DashboardPage
 				renderPage();
 			}
 
+			function initAuditEventsPagination() {
+				var table = root.querySelector("#ard-audit-events-table-grid");
+				var pagination = root.querySelector(".ard-audit-events-pagination");
+				if (!table || !pagination) {
+					return;
+				}
+
+				var tbody = table.querySelector("tbody");
+				if (!tbody) {
+					return;
+				}
+
+				var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr.ard-audit-events-row"));
+				var prevBtn = pagination.querySelector("[data-audit-page-action=\"prev\"]");
+				var nextBtn = pagination.querySelector("[data-audit-page-action=\"next\"]");
+				var pageInfo = pagination.querySelector("[data-audit-page-info]");
+				var pageSizeSelect = pagination.querySelector("[data-audit-page-size]");
+				var currentPage = 1;
+
+				if (!rows.length) {
+					pagination.style.display = "none";
+					return;
+				}
+
+				function renderPage() {
+					var pageSize = parseInt(pageSizeSelect.value || "5", 10);
+					if (!pageSize || pageSize < 1) {
+						pageSize = 5;
+					}
+
+					var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+					if (currentPage > totalPages) {
+						currentPage = totalPages;
+					}
+
+					var start = (currentPage - 1) * pageSize;
+					var end = start + pageSize;
+
+					rows.forEach(function (row, index) {
+						row.style.display = index >= start && index < end ? "" : "none";
+					});
+
+					if (pageInfo) {
+						pageInfo.textContent = "Strana " + currentPage + " / " + totalPages + " (" + rows.length + " udalostí)";
+					}
+					if (prevBtn) {
+						prevBtn.disabled = currentPage <= 1;
+					}
+					if (nextBtn) {
+						nextBtn.disabled = currentPage >= totalPages;
+					}
+				}
+
+				if (prevBtn) {
+					prevBtn.addEventListener("click", function () {
+						if (currentPage > 1) {
+							currentPage -= 1;
+							renderPage();
+						}
+					});
+				}
+
+				if (nextBtn) {
+					nextBtn.addEventListener("click", function () {
+						var pageSize = parseInt(pageSizeSelect.value || "5", 10) || 5;
+						var totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+						if (currentPage < totalPages) {
+							currentPage += 1;
+							renderPage();
+						}
+					});
+				}
+
+				if (pageSizeSelect) {
+					pageSizeSelect.addEventListener("change", function () {
+						currentPage = 1;
+						renderPage();
+					});
+				}
+
+				renderPage();
+			}
+
 			var headings = Array.prototype.slice.call(root.querySelectorAll(":scope > h2"));
 			if (!headings.length) {
 				initOrdersOverviewPagination();
+				initAuditEventsPagination();
 				return;
 			}
 
@@ -1043,6 +1202,7 @@ final class DashboardPage
 
 			root.appendChild(grid);
 			initOrdersOverviewPagination();
+			initAuditEventsPagination();
 		});
 		</script>';
 	}
