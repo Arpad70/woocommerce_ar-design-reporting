@@ -131,7 +131,7 @@ final class ExportManager
 			wp_die(esc_html__('XLSX export vyžaduje rozšírenie ZipArchive na serveri.', 'ar-design-reporting'));
 		}
 
-		$columns = $this->getExportColumns();
+		$columns = $this->getExportColumnsHumanLabels();
 		$rows = $this->buildExportDataset($filters);
 		$temp_file = wp_tempnam('ard-export-xlsx');
 
@@ -201,6 +201,42 @@ final class ExportManager
 			'processing_hours',
 			'created_at_gmt',
 			'updated_at_gmt',
+		);
+	}
+
+	/**
+	 * Human-friendly headers for XLSX export.
+	 *
+	 * @return array<int, string>
+	 */
+	private function getExportColumnsHumanLabels(): array
+	{
+		return array(
+			'ID objednávky',
+			'Číslo objednávky',
+			'ID zodpovědného uživatele',
+			'Zodpovědný uživatel',
+			'ID uživatele poslední změny stavu',
+			'Uživatel poslední změny stavu',
+			'Režim zpracování',
+			'Klasifikace',
+			'Workflow stav',
+			'WooCommerce stav',
+			'Celková částka objednávky',
+			'Měna',
+			'Jméno zákazníka',
+			'E-mail zákazníka',
+			'Telefon zákazníka',
+			'Poznámka zákazníka',
+			'Interní poznámky',
+			'Zahrnout do KPI',
+			'Zdroj změny',
+			'Začátek zpracování (GMT)',
+			'Konec zpracování (GMT)',
+			'Čas zpracování (s)',
+			'Čas zpracování (h)',
+			'Vytvořeno (GMT)',
+			'Aktualizováno (GMT)',
 		);
 	}
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.16 - 2026-04-27
+
+- XLSX export má nově lidské názvy sloupců pro lepší čitelnost mimo technický tým
+- struktura dat v exportu zůstává stejná, změna je pouze v popiscích hlavičky XLSX
+
 ## 0.3.15 - 2026-04-27
 
 - sekcia `Nastavenia a export` rozšírená o export do `.xlsx`
