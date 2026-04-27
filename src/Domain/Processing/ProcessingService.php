@@ -10,17 +10,11 @@ use ArDesign\Reporting\Infrastructure\Repository\OrderProcessingRepository;
 
 final class ProcessingService
 {
-	private const MANAGER_META_KEY = '_ard_manager_user_id';
-	private const OWNER_MISMATCH_TRANSIENT_PREFIX = 'ard_owner_mismatch_';
-	private const TRANSITION_BLOCKED_TRANSIENT_PREFIX = 'ard_transition_blocked_';
-
 	private OrderProcessingRepository $order_processing_repository;
 
 	private AuditLogger $audit_logger;
 
 	private OrderClassifier $order_classifier;
-
-	private bool $is_reverting_blocked_status = false;
 
 	public function __construct(
 		OrderProcessingRepository $order_processing_repository,
@@ -38,12 +32,11 @@ final class ProcessingService
 		$existing_record = $this->getRecord($order_id);
 		$classification = $this->order_classifier->classify($order_id);
 		$created_at     = $this->resolveOrderCreatedAtGmt($order_id);
-		$assigned_manager_id = $this->resolveAssignedManagerUserId($order_id, $existing_record);
 
 		$this->order_processing_repository->replace(
 			array(
 				'order_id'          => $order_id,
-				'owner_user_id'     => isset($existing_record['owner_user_id']) ? (int) $existing_record['owner_user_id'] : ($assigned_manager_id > 0 ? $assigned_manager_id : null),
+				'owner_user_id'     => isset($existing_record['owner_user_id']) ? (int) $existing_record['owner_user_id'] : null,
 				'processing_mode'   => 'standard',
 				'classification'    => $classification['classification'],
 				'is_kpi_included'   => $classification['is_kpi_included'] ? 1 : 0,
@@ -64,10 +57,6 @@ final class ProcessingService
 			return;
 		}
 
-		if ($this->is_reverting_blocked_status) {
-			return;
-		}
-
 		$record = $this->ensureRecord($order_id);
 
 		if (empty($record)) {
@@ -79,79 +68,8 @@ final class ProcessingService
 		$canonical_from_status = $this->normalizeStatus($from_status);
 		$canonical_to_status   = $this->normalizeStatus($to_status);
 		$actor_user_id = get_current_user_id() ?: null;
+		$record = $this->ensureOwnerForActor($order_id, $record, $actor_user_id, 'woocommerce_order_status_changed');
 		$owner_user_id = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
-
-		if ($this->isCancelledRestoreTransition($canonical_from_status, $canonical_to_status) && ! $this->canRestoreCancelledStatus($actor_user_id)) {
-			$this->revertWooOrderStatus($order_id, $from_status);
-			$this->storeTransitionBlockedNotice($order_id, $canonical_from_status, $canonical_to_status, $actor_user_id ?? 0);
-			$this->audit_logger->log(
-				'order_cancelled_restore_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $canonical_from_status),
-				array('status' => $canonical_to_status),
-				array('source' => 'woocommerce_order_status_changed')
-			);
-
-			return;
-		}
-
-		if ($this->shouldBlockOwnerMismatch($actor_user_id, $owner_user_id)) {
-			$this->revertWooOrderStatus($order_id, $from_status);
-			$this->storeOwnerMismatchNotice($order_id, (int) $actor_user_id, $owner_user_id, $from_status, $to_status);
-			$this->audit_logger->log(
-				'order_action_blocked_owner_mismatch',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array(
-					'status' => $from_status,
-					'owner_user_id' => $owner_user_id,
-				),
-				array(
-					'status' => $to_status,
-					'owner_user_id' => $owner_user_id,
-				),
-				array('source' => 'woocommerce_order_status_changed')
-			);
-
-			return;
-		}
-
-		if (! $this->isTransitionAllowed($canonical_from_status, $canonical_to_status)) {
-			$this->revertWooOrderStatus($order_id, $from_status);
-			$this->storeTransitionBlockedNotice($order_id, $canonical_from_status, $canonical_to_status, $actor_user_id ?? 0);
-			$this->audit_logger->log(
-				'order_status_transition_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $canonical_from_status),
-				array('status' => $canonical_to_status),
-				array('source' => 'woocommerce_order_status_changed')
-			);
-
-			return;
-		}
-
-		if ($this->isFailedStatus($canonical_to_status) && ! $this->canTransitionToFailed($canonical_from_status)) {
-			$this->audit_logger->log(
-				'order_failed_transition_blocked',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-					array('status' => $canonical_from_status),
-					array('status' => $canonical_to_status),
-					array('source' => 'woocommerce_order_status_changed')
-				);
-
-			return;
-		}
 
 		$update_data = array(
 			'status'         => $canonical_to_status,
@@ -208,21 +126,6 @@ final class ProcessingService
 
 		if ($current_status === $target_status) {
 			return true;
-		}
-
-		if (! $this->isTransitionAllowed($current_status, $target_status)) {
-			$this->audit_logger->log(
-				'order_status_transition_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $current_status),
-				array('status' => $target_status),
-				array('source' => 'manual_reassign')
-			);
-
-			return false;
 		}
 
 		$order->update_status(
@@ -299,8 +202,6 @@ final class ProcessingService
 			)
 		);
 
-		$this->setOrderMetaManagerUserId($order_id, $actor_user_id);
-
 		$this->audit_logger->log(
 			'order_owner_reassigned',
 			'order',
@@ -320,21 +221,7 @@ final class ProcessingService
 			return;
 		}
 
-		$current_status = $this->normalizeStatus((string) ($record['status'] ?? ''));
-
-		if (! $this->isTransitionAllowed($current_status, 'zabalena')) {
-			$this->audit_logger->log(
-				'order_status_transition_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $current_status),
-				array('status' => 'zabalena'),
-				array('source' => 'manual_packed')
-			);
-			return;
-		}
+		$record = $this->ensureOwnerForActor($order_id, $record, $actor_user_id, 'manual_packed');
 
 		$finished_at = current_time('mysql', true);
 		$status = $this->updateWooOrderToPackedStatus($order_id, $actor_user_id);
@@ -375,21 +262,7 @@ final class ProcessingService
 			return;
 		}
 
-		$current_status = $this->normalizeStatus((string) ($record['status'] ?? ''));
-
-		if (! $this->isTransitionAllowed($current_status, 'vybavena')) {
-			$this->audit_logger->log(
-				'order_status_transition_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $current_status),
-				array('status' => 'vybavena'),
-				array('source' => 'manual_fulfillment')
-			);
-			return;
-		}
+		$record = $this->ensureOwnerForActor($order_id, $record, $actor_user_id, 'manual_fulfillment');
 
 		$finished_at = current_time('mysql', true);
 		$process_started_at = ! empty($record['created_at_gmt']) ? (string) $record['created_at_gmt'] : current_time('mysql', true);
@@ -439,6 +312,7 @@ final class ProcessingService
 		}
 
 		$record = $this->ensureRecord($order_id);
+		$record = $this->ensureOwnerForActor($order_id, $record, $actor_user_id, 'manual_cancel_instead_delete');
 		$order  = wc_get_order($order_id);
 
 		if (! $order instanceof \WC_Order) {
@@ -453,20 +327,6 @@ final class ProcessingService
 		}
 
 		$target_status = $this->normalizeStatus($target_status);
-
-		if (! $this->isTransitionAllowed($current_status, $target_status)) {
-			$this->audit_logger->log(
-				'order_status_transition_not_allowed',
-				'order',
-				$order_id,
-				$order_id,
-				$actor_user_id,
-				array('status' => $current_status),
-				array('status' => $target_status),
-				array('source' => 'manual_cancel_instead_delete')
-			);
-			return;
-		}
 
 		if ($current_status !== $target_status) {
 			$order->update_status(
@@ -713,16 +573,6 @@ final class ProcessingService
 		return '';
 	}
 
-	private function isFailedStatus(string $status): bool
-	{
-		return in_array($status, array('failed', 'neuspesna'), true);
-	}
-
-	private function canTransitionToFailed(string $from_status): bool
-	{
-		return in_array($from_status, array('vybavena', 'completed'), true);
-	}
-
 	private function normalizeStatus(string $status): string
 	{
 		$status = sanitize_key($status);
@@ -740,211 +590,48 @@ final class ProcessingService
 		return $aliases[$status] ?? $status;
 	}
 
-	private function isTransitionAllowed(string $from_status, string $to_status): bool
-	{
-		$from_status = $this->normalizeStatus($from_status);
-		$to_status   = $this->normalizeStatus($to_status);
-
-		if ('' === $from_status || '' === $to_status || $from_status === $to_status) {
-			return true;
-		}
-
-		$allowed = array(
-			'new'          => array('pending', 'processing', 'on-hold', 'na-odoslanie', 'cancelled'),
-			'pending'      => array('na-odoslanie', 'cancelled', 'on-hold'),
-			'processing'   => array('na-odoslanie', 'cancelled', 'on-hold'),
-			'on-hold'      => array('na-odoslanie', 'cancelled'),
-			'na-odoslanie' => array('zabalena', 'on-hold', 'cancelled'),
-			'zabalena'     => array('vybavena', 'on-hold', 'cancelled'),
-			'vybavena'     => array('failed', 'refunded'),
-			'failed'       => array('on-hold', 'cancelled'),
-			'cancelled'    => array('pending', 'processing', 'on-hold', 'na-odoslanie', 'refunded'),
-		);
-
-		if (! isset($allowed[$from_status])) {
-			return false;
-		}
-
-		return in_array($to_status, $allowed[$from_status], true);
-	}
-
-	private function isCancelledRestoreTransition(string $from_status, string $to_status): bool
-	{
-		$from_status = $this->normalizeStatus($from_status);
-		$to_status   = $this->normalizeStatus($to_status);
-
-		if ('cancelled' !== $from_status) {
-			return false;
-		}
-
-		return in_array($to_status, array('pending', 'processing', 'on-hold', 'na-odoslanie'), true);
-	}
-
-	private function canRestoreCancelledStatus(?int $actor_user_id): bool
-	{
-		if (null === $actor_user_id || $actor_user_id <= 0) {
-			return false;
-		}
-
-		if (! function_exists('get_user_by') || ! function_exists('user_can')) {
-			return false;
-		}
-
-		$user = get_user_by('id', $actor_user_id);
-
-		if (! $user instanceof \WP_User) {
-			return false;
-		}
-
-		if (user_can($user, 'manage_options') || user_can($user, 'manage_woocommerce')) {
-			return true;
-		}
-
-		$allowed_roles = (array) apply_filters(
-			'ard_reporting_cancelled_restore_roles',
-			array('administrator', 'shop_manager', 'owner', 'manager')
-		);
-		$user_roles = is_array($user->roles) ? $user->roles : array();
-
-		foreach ($allowed_roles as $allowed_role) {
-			$role = sanitize_key((string) $allowed_role);
-
-			if ('' !== $role && in_array($role, $user_roles, true)) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	private function shouldBlockOwnerMismatch(?int $actor_user_id, int $owner_user_id): bool
-	{
-		return null !== $actor_user_id && $actor_user_id > 0 && $owner_user_id > 0 && $actor_user_id !== $owner_user_id;
-	}
-
-	private function revertWooOrderStatus(int $order_id, string $from_status): void
-	{
-		if ($order_id <= 0 || '' === $from_status || ! function_exists('wc_get_order')) {
-			return;
-		}
-
-		$order = wc_get_order($order_id);
-
-		if (! $order instanceof \WC_Order) {
-			return;
-		}
-
-		$current_status = (string) $order->get_status();
-
-		if ($current_status === $from_status) {
-			return;
-		}
-
-		$this->is_reverting_blocked_status = true;
-
-		try {
-			$order->update_status(
-				$from_status,
-				__('Zmena stavu bola zablokovaná, objednávka je priradená inému používateľovi.', 'ar-design-reporting'),
-				true
-			);
-		} finally {
-			$this->is_reverting_blocked_status = false;
-		}
-	}
-
-	private function storeOwnerMismatchNotice(int $order_id, int $actor_user_id, int $owner_user_id, string $from_status, string $to_status): void
-	{
-		if ($actor_user_id <= 0 || ! function_exists('set_transient')) {
-			return;
-		}
-
-		set_transient(
-			self::OWNER_MISMATCH_TRANSIENT_PREFIX . $actor_user_id,
-			array(
-				'order_id'       => $order_id,
-				'expected_owner' => $owner_user_id,
-				'from_status'    => $from_status,
-				'to_status'      => $to_status,
-				'action'         => 'status_change',
-			),
-				300
-		);
-	}
-
-	private function storeTransitionBlockedNotice(int $order_id, string $from_status, string $to_status, int $actor_user_id): void
-	{
-		if ($actor_user_id <= 0 || ! function_exists('set_transient')) {
-			return;
-		}
-
-		set_transient(
-			self::TRANSITION_BLOCKED_TRANSIENT_PREFIX . $actor_user_id,
-			array(
-				'order_id'    => $order_id,
-				'from_status' => $from_status,
-				'to_status'   => $to_status,
-			),
-			300
-		);
-	}
-
 	/**
-	 * @param array<string, mixed> $existing_record
+	 * @param array<string, mixed> $record
+	 * @return array<string, mixed>
 	 */
-	private function resolveAssignedManagerUserId(int $order_id, array $existing_record): int
+	private function ensureOwnerForActor(int $order_id, array $record, ?int $actor_user_id, string $source): array
 	{
-		if (! empty($existing_record['owner_user_id'])) {
-			return (int) $existing_record['owner_user_id'];
+		if (null === $actor_user_id || $actor_user_id <= 0 || $order_id <= 0) {
+			return $record;
 		}
 
-		$current_meta_manager_id = $this->getOrderMetaManagerUserId($order_id);
+		$current_owner_id = isset($record['owner_user_id']) ? (int) $record['owner_user_id'] : 0;
 
-		if ($current_meta_manager_id > 0) {
-			return $current_meta_manager_id;
+		if ($current_owner_id > 0 && $current_owner_id === $actor_user_id) {
+			return $record;
 		}
 
-		$default_manager_id = (int) get_option('ard_reporting_default_manager_user_id', 0);
+		$this->order_processing_repository->updateByOrderId(
+			$order_id,
+			array(
+				'owner_user_id'  => $actor_user_id,
+				'updated_at_gmt' => current_time('mysql', true),
+				'source_trigger' => $source,
+			)
+		);
 
-		if ($default_manager_id > 0) {
-			$this->setOrderMetaManagerUserId($order_id, $default_manager_id);
-		}
+		$this->audit_logger->log(
+			'order_owner_reassigned',
+			'order',
+			$order_id,
+			$order_id,
+			$actor_user_id,
+			array('owner_user_id' => $current_owner_id > 0 ? $current_owner_id : null),
+			array('owner_user_id' => $actor_user_id),
+			array(
+				'source' => $source,
+				'reassign_mode' => 'automatic_before_status_change',
+			)
+		);
 
-		return $default_manager_id;
-	}
+		$record['owner_user_id'] = $actor_user_id;
 
-	private function getOrderMetaManagerUserId(int $order_id): int
-	{
-		if ($order_id <= 0) {
-			return 0;
-		}
-
-		if (! function_exists('wc_get_order')) {
-			return 0;
-		}
-
-		$order = wc_get_order($order_id);
-		if (! $order instanceof \WC_Order) {
-			return 0;
-		}
-
-		return (int) $order->get_meta(self::MANAGER_META_KEY, true);
-	}
-
-	private function setOrderMetaManagerUserId(int $order_id, int $manager_user_id): void
-	{
-		if ($order_id <= 0 || $manager_user_id <= 0 || ! function_exists('wc_get_order')) {
-			return;
-		}
-
-		$order = wc_get_order($order_id);
-
-		if (! $order instanceof \WC_Order) {
-			return;
-		}
-
-		$order->update_meta_data(self::MANAGER_META_KEY, $manager_user_id);
-		$order->save();
+		return $record;
 	}
 
 	private function resolveOrderCreatedAtGmt(int $order_id): string
