@@ -232,7 +232,9 @@ final class DashboardPage
 		echo '<thead><tr><th>' . esc_html__('Metrika', 'ar-design-reporting') . '</th><th>' . esc_html__('Hodnota', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
-		foreach ($kpis as $key => $value) {
+		$kpi_table_keys = $this->getKpiDisplayOrder($kpis);
+		foreach ($kpi_table_keys as $key) {
+			$value = $kpis[$key];
 			echo '<tr>';
 			echo '<td>' . esc_html($this->getKpiLabel((string) $key)) . '</td>';
 			$compare_value = $compare_kpis[(string) $key] ?? null;
@@ -623,12 +625,12 @@ final class DashboardPage
 			'gross_revenue',
 			'revenue_completed',
 			'revenue_pending',
+			'cancelled_orders',
 			'revenue_cancelled',
+			'average_order_value_cancelled',
 			'average_order_value',
 			'average_order_value_completed',
 			'average_order_value_pending',
-			'average_order_value_cancelled',
-			'cancelled_orders',
 		);
 
 		$compare_from_label = $this->formatIsoDateForCzechDisplay($compare_date_from);
@@ -668,6 +670,50 @@ final class DashboardPage
 		}
 
 		echo '</div>';
+	}
+
+	/**
+	 * @param array<string, int|float> $kpis
+	 * @return array<int, string>
+	 */
+	private function getKpiDisplayOrder(array $kpis): array
+	{
+		$preferred = array(
+			'gross_revenue',
+			'revenue_completed',
+			'revenue_pending',
+			'cancelled_orders',
+			'revenue_cancelled',
+			'average_order_value_cancelled',
+			'net_revenue',
+			'average_order_value',
+			'average_order_value_completed',
+			'average_order_value_pending',
+			'total_orders',
+			'completed_orders',
+			'pending_orders',
+			'kpi_orders',
+			'completed',
+			'audit_events',
+			'avg_ready_for_packing_hours',
+			'avg_processing_hours',
+			'orders_per_employee',
+		);
+
+		$ordered = array();
+		foreach ($preferred as $key) {
+			if (array_key_exists($key, $kpis)) {
+				$ordered[] = $key;
+			}
+		}
+
+		foreach (array_keys($kpis) as $key) {
+			if (! in_array($key, $ordered, true)) {
+				$ordered[] = $key;
+			}
+		}
+
+		return $ordered;
 	}
 
 	/**
