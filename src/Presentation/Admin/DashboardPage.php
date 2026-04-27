@@ -320,9 +320,8 @@ final class DashboardPage
 
 		echo '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">';
 		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;min-width:320px;">';
-		wp_nonce_field('ard_export_csv');
-		echo '<input type="hidden" name="action" value="ard_export_csv" />';
-		echo '<h3 style="margin-top:0;">' . esc_html__('CSV export', 'ar-design-reporting') . '</h3>';
+		wp_nonce_field('ard_export_data');
+		echo '<h3 style="margin-top:0;">' . esc_html__('Export dát', 'ar-design-reporting') . '</h3>';
 		echo '<p><label for="ard-export-status">' . esc_html__('Stav workflow', 'ar-design-reporting') . '</label></p>';
 		echo '<p><select id="ard-export-status" name="status" class="regular-text">';
 		echo '<option value="">' . esc_html__('Všechny', 'ar-design-reporting') . '</option>';
@@ -348,7 +347,10 @@ final class DashboardPage
 		echo '<p><input id="ard-export-date-from" type="date" name="date_from" value="' . esc_attr($export_date_from) . '" class="regular-text" /></p>';
 		echo '<p><label for="ard-export-date-to">' . esc_html__('Datum do', 'ar-design-reporting') . '</label></p>';
 		echo '<p><input id="ard-export-date-to" type="date" name="date_to" value="' . esc_attr($export_date_to) . '" class="regular-text" /></p>';
-		submit_button(__('Stáhnout CSV', 'ar-design-reporting'), 'primary', 'submit', false);
+		echo '<p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">';
+		echo '<button type="submit" name="action" value="ard_export_csv" class="button button-primary">' . esc_html__('Stáhnout CSV', 'ar-design-reporting') . '</button>';
+		echo '<button type="submit" name="action" value="ard_export_xlsx" class="button button-secondary">' . esc_html__('Stáhnout XLSX', 'ar-design-reporting') . '</button>';
+		echo '</p>';
 		echo '</form>';
 
 		echo '<div style="display:flex;flex-direction:column;gap:16px;min-width:360px;max-width:520px;">';

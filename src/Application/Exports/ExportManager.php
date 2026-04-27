@@ -95,9 +95,7 @@ final class ExportManager
 	 */
 	public function streamProcessingCsv( array $filters = array() ): void
 	{
-		$normalized = $this->normalizeFilters( $filters );
-		$rows       = $this->order_processing_repository->findForExport( $normalized );
-		$audit_actors = $this->loadLastStatusChangeActors( $rows );
+		$dataset = $this->buildExportDataset($filters);
 
 		nocache_headers();
 
@@ -114,76 +112,246 @@ final class ExportManager
 
 		fputcsv(
 			$output,
-			array(
-				'order_id',
-				'order_number',
-				'owner_user_id',
-				'owner_name',
-				'last_status_change_actor',
-				'last_status_change_actor_name',
-				'processing_mode',
-				'classification',
-				'status',
-				'wc_status',
-				'order_total',
-				'order_currency',
-				'customer_name',
-				'customer_email',
-				'billing_phone',
-				'customer_note',
-				'internal_notes',
-				'is_kpi_included',
-				'source_trigger',
-				'started_at_gmt',
-				'finished_at_gmt',
-				'processing_seconds',
-				'processing_hours',
-				'created_at_gmt',
-				'updated_at_gmt',
-			)
+			$this->getExportColumns()
 		);
 
-		if ( is_array( $rows ) ) {
-			foreach ( $rows as $row ) {
-				$order_id = (int) ( $row['order_id'] ?? 0 );
-				$wc_data = $this->loadWooOrderData( $order_id );
-				$owner_id = (int) ( $row['owner_user_id'] ?? 0 );
-				$last_actor_id = (int) ( $audit_actors[ $order_id ] ?? 0 );
-				$processing_seconds = isset( $row['processing_seconds'] ) ? (int) $row['processing_seconds'] : 0;
-				fputcsv(
-					$output,
-					array(
-						$order_id,
-						$wc_data['order_number'],
-						$owner_id,
-						$this->resolveUserDisplayName( $owner_id ),
-						$last_actor_id > 0 ? $last_actor_id : '',
-						$this->resolveUserDisplayName( $last_actor_id ),
-						$row['processing_mode'] ?? '',
-						$row['classification'] ?? '',
-						$row['status'] ?? '',
-						$wc_data['wc_status'],
-						$wc_data['order_total'],
-						$wc_data['order_currency'],
-						$wc_data['customer_name'],
-						$wc_data['customer_email'],
-						$wc_data['billing_phone'],
-						$wc_data['customer_note'],
-						$wc_data['internal_notes'],
-						$row['is_kpi_included'] ?? '',
-						$row['source_trigger'] ?? '',
-						$row['started_at_gmt'] ?? '',
-						$row['finished_at_gmt'] ?? '',
-						$processing_seconds > 0 ? $processing_seconds : '',
-						$processing_seconds > 0 ? round( $processing_seconds / 3600, 2 ) : '',
-						$row['created_at_gmt'] ?? '',
-						$row['updated_at_gmt'] ?? '',
-					)
-				);
-			}
+		foreach ($dataset as $record) {
+			fputcsv($output, $record);
 		}
 
 		fclose( $output );
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 */
+	public function streamProcessingXlsx(array $filters = array()): void
+	{
+		if (! class_exists(\ZipArchive::class)) {
+			wp_die(esc_html__('XLSX export vyžaduje rozšírenie ZipArchive na serveri.', 'ar-design-reporting'));
+		}
+
+		$columns = $this->getExportColumns();
+		$rows = $this->buildExportDataset($filters);
+		$temp_file = wp_tempnam('ard-export-xlsx');
+
+		if (! is_string($temp_file) || '' === $temp_file) {
+			wp_die(esc_html__('Nepodarilo sa pripraviť dočasný súbor pre XLSX export.', 'ar-design-reporting'));
+		}
+
+		$zip = new \ZipArchive();
+		$open_result = $zip->open($temp_file, \ZipArchive::OVERWRITE);
+
+		if (true !== $open_result) {
+			wp_die(esc_html__('Nepodarilo sa vytvoriť XLSX export.', 'ar-design-reporting'));
+		}
+
+		$sheet_rows = array();
+		$sheet_rows[] = $columns;
+		foreach ($rows as $record) {
+			$sheet_rows[] = $record;
+		}
+
+		$zip->addFromString('[Content_Types].xml', $this->buildXlsxContentTypesXml());
+		$zip->addFromString('_rels/.rels', $this->buildXlsxRootRelsXml());
+		$zip->addFromString('xl/workbook.xml', $this->buildXlsxWorkbookXml());
+		$zip->addFromString('xl/_rels/workbook.xml.rels', $this->buildXlsxWorkbookRelsXml());
+		$zip->addFromString('xl/styles.xml', $this->buildXlsxStylesXml());
+		$zip->addFromString('xl/worksheets/sheet1.xml', $this->buildXlsxSheetXml($sheet_rows));
+		$zip->close();
+
+		nocache_headers();
+		$filename = 'ar-design-reporting-' . gmdate('Ymd-His') . '.xlsx';
+		header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+		header('Content-Disposition: attachment; filename="' . $filename . '"');
+		header('Content-Length: ' . filesize($temp_file));
+
+		readfile($temp_file);
+		@unlink($temp_file);
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private function getExportColumns(): array
+	{
+		return array(
+			'order_id',
+			'order_number',
+			'owner_user_id',
+			'owner_name',
+			'last_status_change_actor',
+			'last_status_change_actor_name',
+			'processing_mode',
+			'classification',
+			'status',
+			'wc_status',
+			'order_total',
+			'order_currency',
+			'customer_name',
+			'customer_email',
+			'billing_phone',
+			'customer_note',
+			'internal_notes',
+			'is_kpi_included',
+			'source_trigger',
+			'started_at_gmt',
+			'finished_at_gmt',
+			'processing_seconds',
+			'processing_hours',
+			'created_at_gmt',
+			'updated_at_gmt',
+		);
+	}
+
+	/**
+	 * @param array<string, mixed> $filters
+	 * @return array<int, array<int, string>>
+	 */
+	private function buildExportDataset(array $filters): array
+	{
+		$normalized = $this->normalizeFilters($filters);
+		$rows = $this->order_processing_repository->findForExport($normalized);
+		$audit_actors = $this->loadLastStatusChangeActors($rows);
+		$dataset = array();
+
+		if (! is_array($rows)) {
+			return $dataset;
+		}
+
+		foreach ($rows as $row) {
+			$order_id = (int) ($row['order_id'] ?? 0);
+			$wc_data = $this->loadWooOrderData($order_id);
+			$owner_id = (int) ($row['owner_user_id'] ?? 0);
+			$last_actor_id = (int) ($audit_actors[$order_id] ?? 0);
+			$processing_seconds = isset($row['processing_seconds']) ? (int) $row['processing_seconds'] : 0;
+
+			$dataset[] = array(
+				(string) $order_id,
+				(string) $wc_data['order_number'],
+				$owner_id > 0 ? (string) $owner_id : '',
+				(string) $this->resolveUserDisplayName($owner_id),
+				$last_actor_id > 0 ? (string) $last_actor_id : '',
+				(string) $this->resolveUserDisplayName($last_actor_id),
+				(string) ($row['processing_mode'] ?? ''),
+				(string) ($row['classification'] ?? ''),
+				(string) ($row['status'] ?? ''),
+				(string) $wc_data['wc_status'],
+				(string) $wc_data['order_total'],
+				(string) $wc_data['order_currency'],
+				(string) $wc_data['customer_name'],
+				(string) $wc_data['customer_email'],
+				(string) $wc_data['billing_phone'],
+				(string) $wc_data['customer_note'],
+				(string) $wc_data['internal_notes'],
+				(string) ($row['is_kpi_included'] ?? ''),
+				(string) ($row['source_trigger'] ?? ''),
+				(string) ($row['started_at_gmt'] ?? ''),
+				(string) ($row['finished_at_gmt'] ?? ''),
+				$processing_seconds > 0 ? (string) $processing_seconds : '',
+				$processing_seconds > 0 ? (string) round($processing_seconds / 3600, 2) : '',
+				(string) ($row['created_at_gmt'] ?? ''),
+				(string) ($row['updated_at_gmt'] ?? ''),
+			);
+		}
+
+		return $dataset;
+	}
+
+	private function buildXlsxContentTypesXml(): string
+	{
+		return '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+			. '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+			. '<Default Extension="xml" ContentType="application/xml"/>'
+			. '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+			. '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+			. '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+			. '</Types>';
+	}
+
+	private function buildXlsxRootRelsXml(): string
+	{
+		return '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+			. '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+			. '</Relationships>';
+	}
+
+	private function buildXlsxWorkbookXml(): string
+	{
+		return '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+			. 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+			. '<sheets>'
+			. '<sheet name="Export" sheetId="1" r:id="rId1"/>'
+			. '</sheets>'
+			. '</workbook>';
+	}
+
+	private function buildXlsxWorkbookRelsXml(): string
+	{
+		return '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+			. '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+			. '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+			. '</Relationships>';
+	}
+
+	private function buildXlsxStylesXml(): string
+	{
+		return '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+			. '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+			. '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>'
+			. '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+			. '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+			. '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+			. '</styleSheet>';
+	}
+
+	/**
+	 * @param array<int, array<int, string>> $rows
+	 */
+	private function buildXlsxSheetXml(array $rows): string
+	{
+		$xml = '<?xml version="1.0" encoding="UTF-8"?>'
+			. '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+			. '<sheetData>';
+
+		foreach ($rows as $row_index => $row_cells) {
+			$row_number = $row_index + 1;
+			$xml .= '<row r="' . $row_number . '">';
+
+			foreach ($row_cells as $col_index => $cell_value) {
+				$cell_ref = $this->xlsxColumnName($col_index + 1) . $row_number;
+				$escaped = $this->escapeXmlValue((string) $cell_value);
+				$xml .= '<c r="' . $cell_ref . '" t="inlineStr"><is><t xml:space="preserve">' . $escaped . '</t></is></c>';
+			}
+
+			$xml .= '</row>';
+		}
+
+		$xml .= '</sheetData></worksheet>';
+
+		return $xml;
+	}
+
+	private function escapeXmlValue(string $value): string
+	{
+		return htmlspecialchars($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+	}
+
+	private function xlsxColumnName(int $column_index): string
+	{
+		$name = '';
+		while ($column_index > 0) {
+			$column_index--;
+			$name = chr(($column_index % 26) + 65) . $name;
+			$column_index = (int) floor($column_index / 26);
+		}
+
+		return $name;
 	}
 
 	/**

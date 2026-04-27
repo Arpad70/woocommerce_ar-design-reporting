@@ -34,6 +34,7 @@ final class WorkflowActions
 		add_action('admin_post_ard_complete_fulfillment', array($this, 'handleCompleteFulfillment'));
 		add_action('admin_post_ard_mark_order_cancelled', array($this, 'handleMarkOrderCancelled'));
 		add_action('admin_post_ard_export_csv', array($this, 'handleExportCsv'));
+		add_action('admin_post_ard_export_xlsx', array($this, 'handleExportXlsx'));
 		add_action('admin_post_ard_save_email_report', array($this, 'handleSaveEmailReport'));
 		add_action('admin_post_ard_send_digest_now', array($this, 'handleSendDigestNow'));
 	}
@@ -105,11 +106,22 @@ final class WorkflowActions
 	public function handleExportCsv(): void
 	{
 		$this->ensurePermissions();
-		check_admin_referer('ard_export_csv');
+		check_admin_referer('ard_export_data');
 
 		$raw_filters = wp_unslash($_POST);
 		$filters = $this->export_manager->normalizeFilters(is_array($raw_filters) ? $raw_filters : array());
 		$this->export_manager->streamProcessingCsv($filters);
+		exit;
+	}
+
+	public function handleExportXlsx(): void
+	{
+		$this->ensurePermissions();
+		check_admin_referer('ard_export_data');
+
+		$raw_filters = wp_unslash($_POST);
+		$filters = $this->export_manager->normalizeFilters(is_array($raw_filters) ? $raw_filters : array());
+		$this->export_manager->streamProcessingXlsx($filters);
 		exit;
 	}
 
