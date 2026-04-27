@@ -37,6 +37,7 @@ final class ExportManager
 	{
 		$status = isset( $filters['status'] ) ? sanitize_key( (string) $filters['status'] ) : '';
 		$class  = isset( $filters['classification'] ) ? sanitize_key( (string) $filters['classification'] ) : '';
+		$kpi_included = isset( $filters['kpi_included'] ) ? sanitize_key( (string) $filters['kpi_included'] ) : '';
 		$from   = isset( $filters['date_from'] ) ? sanitize_text_field( (string) $filters['date_from'] ) : '';
 		$to     = isset( $filters['date_to'] ) ? sanitize_text_field( (string) $filters['date_to'] ) : '';
 		$allowed_statuses = array(
@@ -68,6 +69,10 @@ final class ExportManager
 			$class = '';
 		}
 
+		if ( ! in_array( $kpi_included, array( '1', '0' ), true ) ) {
+			$kpi_included = '';
+		}
+
 		if ( ! $this->isValidIsoDate( $from ) ) {
 			$from = '';
 		}
@@ -85,6 +90,7 @@ final class ExportManager
 		return array(
 			'status'         => $status,
 			'classification' => $class,
+			'kpi_included'   => $kpi_included,
 			'date_from'      => $from,
 			'date_to'        => $to,
 		);

@@ -117,6 +117,8 @@ class OrderProcessingRepository
 			$params[] = $filters['classification'];
 		}
 
+		$this->appendKpiIncludedFilter($where, $params, $filters);
+
 		if ('' !== ($filters['date_from'] ?? '')) {
 			$where[]  = 'DATE(created_at_gmt) >= %s';
 			$params[] = $filters['date_from'];
@@ -155,6 +157,7 @@ class OrderProcessingRepository
 		$table = $this->tables->orderProcessing();
 		$where_parts = array();
 		$params = array();
+		$this->appendKpiIncludedFilter($where_parts, $params, $filters);
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 		$where_sql = ! empty($where_parts) ? ' WHERE ' . implode(' AND ', $where_parts) : '';
 
@@ -188,6 +191,7 @@ class OrderProcessingRepository
 			"status IN ('vybavena', 'completed')",
 		);
 		$params = array();
+		$this->appendKpiIncludedFilter($where_parts, $params, $filters);
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 		$sql = "SELECT AVG(processing_seconds) FROM {$table} WHERE " . implode(' AND ', $where_parts);
 
@@ -211,6 +215,7 @@ class OrderProcessingRepository
 			'owner_user_id > 0',
 		);
 		$params = array();
+		$this->appendKpiIncludedFilter($where_parts, $params, $filters);
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 
 		$subquery = "SELECT owner_user_id, COUNT(*) AS order_count FROM {$table} WHERE " . implode(' AND ', $where_parts) . ' GROUP BY owner_user_id';
@@ -238,6 +243,7 @@ class OrderProcessingRepository
 			'owner_user_id > 0',
 		);
 		$params = array();
+		$this->appendKpiIncludedFilter($where_parts, $params, $filters);
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 
 		$sql = "SELECT owner_user_id, COUNT(*) AS orders_count, AVG(processing_seconds) AS avg_processing_seconds
@@ -265,7 +271,7 @@ class OrderProcessingRepository
 		global $wpdb;
 
 		$table = $this->tables->orderProcessing();
-		$limit = max(1, min(500, $limit));
+		$limit = max(1, min(5000, $limit));
 		$where_parts = array();
 		$params = array();
 
@@ -279,9 +285,11 @@ class OrderProcessingRepository
 			$params[] = $filters['classification'];
 		}
 
+		$this->appendKpiIncludedFilter($where_parts, $params, $filters);
+
 		$this->appendDateRangeFilter($where_parts, $params, $filters);
 
-		$sql = "SELECT order_id, owner_user_id, classification, status, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, created_at_gmt, updated_at_gmt
+		$sql = "SELECT order_id, owner_user_id, classification, status, is_kpi_included, started_at_gmt, finished_at_gmt, processing_seconds, source_trigger, created_at_gmt, updated_at_gmt
 			FROM {$table}";
 
 		if (! empty($where_parts)) {
@@ -344,6 +352,20 @@ class OrderProcessingRepository
 		if ('' !== ($filters['date_to'] ?? '')) {
 			$where_parts[] = 'DATE(created_at_gmt) <= %s';
 			$params[] = (string) $filters['date_to'];
+		}
+	}
+
+	/**
+	 * @param array<int, string> $where_parts
+	 * @param array<int, string> $params
+	 * @param array<string, string> $filters
+	 */
+	private function appendKpiIncludedFilter(array &$where_parts, array &$params, array $filters): void
+	{
+		$kpi_included = isset($filters['kpi_included']) ? (string) $filters['kpi_included'] : '';
+		if ('1' === $kpi_included || '0' === $kpi_included) {
+			$where_parts[] = 'is_kpi_included = %d';
+			$params[] = $kpi_included;
 		}
 	}
 }

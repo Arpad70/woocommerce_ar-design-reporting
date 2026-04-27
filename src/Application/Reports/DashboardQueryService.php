@@ -47,7 +47,7 @@ final class DashboardQueryService
 	 */
 	public function getDashboardData(array $filters = array(), array $compare_filters = array()): array
 	{
-		$order_rows = $this->order_processing_repository->getOrderRowsForDashboard($filters, 200);
+		$order_rows = $this->order_processing_repository->getOrderRowsForDashboard($filters, 5000);
 		$order_ids  = array();
 
 		foreach ($order_rows as $row) {
@@ -93,6 +93,7 @@ final class DashboardQueryService
 				'owner_user_id'             => (int) ($row['owner_user_id'] ?? 0),
 				'classification'            => (string) ($row['classification'] ?? ''),
 				'status'                    => (string) ($row['status'] ?? ''),
+				'is_kpi_included'           => isset($row['is_kpi_included']) ? (int) $row['is_kpi_included'] : 0,
 				'processing_seconds'        => isset($row['processing_seconds']) ? (int) $row['processing_seconds'] : null,
 				'created_at_gmt'            => $created_at_gmt,
 				'ready_for_packing_at_gmt'  => $ready_at_gmt,

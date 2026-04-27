@@ -60,6 +60,7 @@ final class DashboardPage
 
 		$export_status = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
 		$export_classification = isset($_GET['classification']) ? sanitize_key(wp_unslash($_GET['classification'])) : '';
+		$export_kpi_included = isset($_GET['kpi_included']) ? sanitize_key(wp_unslash($_GET['kpi_included'])) : '';
 		$default_date_from = $this->getCurrentMonthStartDate();
 		$default_date_to = $this->getCurrentDateIso();
 		$export_date_from = isset($_GET['date_from']) ? sanitize_text_field(wp_unslash($_GET['date_from'])) : $default_date_from;
@@ -89,6 +90,7 @@ final class DashboardPage
 			array(
 				'status'         => $export_status,
 				'classification' => $export_classification,
+				'kpi_included'   => $export_kpi_included,
 				'date_from'      => $export_date_from,
 				'date_to'        => $export_date_to,
 			)
@@ -97,14 +99,13 @@ final class DashboardPage
 			array(
 				'status'         => $export_status,
 				'classification' => $export_classification,
+				'kpi_included'   => $export_kpi_included,
 				'date_from'      => $compare_date_from,
 				'date_to'        => $compare_date_to,
 			)
 		);
 		$data         = $this->dashboard_query_service->getDashboardData($dashboard_filters, $compare_filters);
 		$export_info  = $this->export_manager->describeCsvExport($dashboard_filters);
-		$email_info   = $this->email_reporter->describeDigest();
-		$email_configs = $this->email_reporter->getConfigurations();
 		$kpis         = is_array($data['kpis']) ? $data['kpis'] : array();
 		$compare_kpis = is_array($data['compare_kpis'] ?? null) ? $data['compare_kpis'] : array();
 		$kpi_compare  = is_array($data['kpi_compare'] ?? null) ? $data['kpi_compare'] : array();
@@ -134,6 +135,7 @@ final class DashboardPage
 			'page'              => 'ar-design-reporting',
 			'status'            => $export_status,
 			'classification'    => $export_classification,
+			'kpi_included'      => $export_kpi_included,
 			'date_from'         => $export_date_from,
 			'date_to'           => $export_date_to,
 			'compare_date_from' => $compare_date_from,
@@ -150,7 +152,30 @@ final class DashboardPage
 		echo '<div class="ard-reporting-dashboard">';
 		echo '<h1>' . esc_html__('AR Design Reporting', 'ar-design-reporting') . '</h1>';
 		echo '<p>' . esc_html__('Dashboard zobrazuje objednávky, KPI, výkon zamestnancov a auditné udalosti podľa zvolených filtrov.', 'ar-design-reporting') . '</p>';
-		echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;max-width:1200px;margin-top:12px;">';
+		echo '<table class="widefat striped" style="width:100%;margin-top:16px;">';
+		echo '<tbody>';
+		$wp_694_compatible = version_compare('6.9.4', Requirements::MIN_WORDPRESS_VERSION, '>=');
+		echo '<tr><th style="width:260px;">' . esc_html__('Verzia pluginu', 'ar-design-reporting') . '</th><td>' . esc_html((string) $this->plugin_meta['version']) . '</td></tr>';
+		echo '<tr><th>' . esc_html__('DB verzia', 'ar-design-reporting') . '</th><td>' . esc_html((string) get_option('ard_reporting_db_version', 'n/a')) . '</td></tr>';
+		echo '<tr><th>' . esc_html__('Kompatibilita s WordPress 6.9.4', 'ar-design-reporting') . '</th><td>' . esc_html(
+			$wp_694_compatible
+				? sprintf(
+					/* translators: %s: minimum supported WordPress version */
+					__('Áno (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
+					Requirements::MIN_WORDPRESS_VERSION
+				)
+				: sprintf(
+					/* translators: %s: minimum supported WordPress version */
+					__('Nie (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
+					Requirements::MIN_WORDPRESS_VERSION
+				)
+		) . '</td></tr>';
+		echo '<tr><th>' . esc_html__('HPOS režim', 'ar-design-reporting') . '</th><td>' . esc_html(! empty($data['hpos_enabled']) ? __('aktivní', 'ar-design-reporting') : __('neaktivní', 'ar-design-reporting')) . '</td></tr>';
+		echo '<tr><th>' . esc_html__('Migrace', 'ar-design-reporting') . '</th><td>' . esc_html(empty($missing) ? __('v pořádku', 'ar-design-reporting') : __('chybí některé tabulky', 'ar-design-reporting')) . '</td></tr>';
+		echo '</tbody>';
+		echo '</table>';
+
+		echo '<form method="get" action="' . esc_url(admin_url('admin.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;width:100%;max-width:none;margin-top:12px;">';
 		echo '<input type="hidden" name="page" value="ar-design-reporting" />';
 		echo '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">';
 		echo '<p><label for="ard-dashboard-status">' . esc_html__('Stav', 'ar-design-reporting') . '</label><br />';
@@ -174,6 +199,12 @@ final class DashboardPage
 		echo '<option value="preorder"' . selected('preorder', $export_classification, false) . '>preorder</option>';
 		echo '<option value="custom"' . selected('custom', $export_classification, false) . '>custom</option>';
 		echo '</select></p>';
+		echo '<p><label for="ard-dashboard-kpi-included">' . esc_html__('V KPI', 'ar-design-reporting') . '</label><br />';
+		echo '<select id="ard-dashboard-kpi-included" name="kpi_included">';
+		echo '<option value="">' . esc_html__('Všechny', 'ar-design-reporting') . '</option>';
+		echo '<option value="1"' . selected('1', $export_kpi_included, false) . '>' . esc_html__('Ano', 'ar-design-reporting') . '</option>';
+		echo '<option value="0"' . selected('0', $export_kpi_included, false) . '>' . esc_html__('Ne', 'ar-design-reporting') . '</option>';
+		echo '</select></p>';
 		echo '<p><label for="ard-dashboard-date-from">' . esc_html__('Datum od', 'ar-design-reporting') . '</label><br />';
 		echo '<input id="ard-dashboard-date-from" type="date" name="date_from" value="' . esc_attr($export_date_from) . '" /></p>';
 		echo '<p><label for="ard-dashboard-date-to">' . esc_html__('Datum do', 'ar-design-reporting') . '</label><br />';
@@ -187,29 +218,6 @@ final class DashboardPage
 		echo '</p>';
 		echo '</div>';
 		echo '</form>';
-
-		echo '<table class="widefat striped" style="max-width:960px;margin-top:16px;">';
-		echo '<tbody>';
-		$wp_694_compatible = version_compare('6.9.4', Requirements::MIN_WORDPRESS_VERSION, '>=');
-		echo '<tr><th style="width:260px;">' . esc_html__('Verzia pluginu', 'ar-design-reporting') . '</th><td>' . esc_html((string) $this->plugin_meta['version']) . '</td></tr>';
-		echo '<tr><th>' . esc_html__('DB verzia', 'ar-design-reporting') . '</th><td>' . esc_html((string) get_option('ard_reporting_db_version', 'n/a')) . '</td></tr>';
-		echo '<tr><th>' . esc_html__('Kompatibilita s WordPress 6.9.4', 'ar-design-reporting') . '</th><td>' . esc_html(
-			$wp_694_compatible
-				? sprintf(
-					/* translators: %s: minimum supported WordPress version */
-					__('Áno (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
-					Requirements::MIN_WORDPRESS_VERSION
-				)
-				: sprintf(
-					/* translators: %s: minimum supported WordPress version */
-					__('Nie (plugin vyžaduje WordPress %s alebo novší).', 'ar-design-reporting'),
-					Requirements::MIN_WORDPRESS_VERSION
-				)
-		) . '</td></tr>';
-		echo '<tr><th>' . esc_html__('HPOS režim', 'ar-design-reporting') . '</th><td>' . esc_html(! empty($data['hpos_enabled']) ? __('aktivní', 'ar-design-reporting') : __('neaktivní', 'ar-design-reporting')) . '</td></tr>';
-		echo '<tr><th>' . esc_html__('Migrace', 'ar-design-reporting') . '</th><td>' . esc_html(empty($missing) ? __('v pořádku', 'ar-design-reporting') : __('chybí některé tabulky', 'ar-design-reporting')) . '</td></tr>';
-		echo '</tbody>';
-		echo '</table>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Připravené moduly', 'ar-design-reporting') . '</h2>';
 		echo '<ul style="list-style:disc;padding-left:18px;">';
@@ -239,17 +247,18 @@ final class DashboardPage
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Prehľad objednávok', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Zoznam zobrazuje všetky objednávky v zvolenom filtri vrátane stavu, zodpovednej osoby a poslednej zmeny statusu.', 'ar-design-reporting') . '</p>';
 		echo '<div class="ard-orders-overview-wrap">';
-		echo '<table id="ard-orders-overview-table" class="widefat striped ard-orders-overview-table" style="max-width:1200px;">';
-		echo '<thead><tr><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
+		echo '<table id="ard-orders-overview-table" class="widefat striped ard-orders-overview-table">';
+		echo '<thead><tr><th>' . esc_html__('Objednávka', 'ar-design-reporting') . '</th><th>' . esc_html__('Stav', 'ar-design-reporting') . '</th><th>' . esc_html__('Klasifikácia', 'ar-design-reporting') . '</th><th>' . esc_html__('V KPI', 'ar-design-reporting') . '</th><th>' . esc_html__('Zodpovedný', 'ar-design-reporting') . '</th><th>' . esc_html__('Posledná zmena', 'ar-design-reporting') . '</th><th>' . esc_html__('Do Na odoslanie', 'ar-design-reporting') . '</th><th>' . esc_html__('Celkový čas procesu', 'ar-design-reporting') . '</th></tr></thead>';
 		echo '<tbody>';
 
 		if (empty($orders_overview)) {
-			echo '<tr><td colspan="7">' . esc_html__('Pre zvolený filter nie sú dostupné žiadne objednávky.', 'ar-design-reporting') . '</td></tr>';
+			echo '<tr><td colspan="8">' . esc_html__('Pre zvolený filter nie sú dostupné žiadne objednávky.', 'ar-design-reporting') . '</td></tr>';
 		} else {
 			foreach ($orders_overview as $order_row) {
 				$order_id = (int) ($order_row['order_id'] ?? 0);
 				$owner_id = (int) ($order_row['owner_user_id'] ?? 0);
 				$last_actor_id = (int) ($order_row['last_status_change_actor'] ?? 0);
+				$is_kpi_included = isset($order_row['is_kpi_included']) ? (int) $order_row['is_kpi_included'] : 0;
 				$processing_seconds = isset($order_row['processing_seconds']) ? (int) $order_row['processing_seconds'] : 0;
 				$ready_seconds = isset($order_row['ready_for_packing_seconds']) ? (int) $order_row['ready_for_packing_seconds'] : 0;
 
@@ -257,6 +266,7 @@ final class DashboardPage
 				echo '<td><a href="' . esc_url($this->getOrderAdminUrl($order_id)) . '">' . esc_html($this->resolveOrderNumberLabel($order_id)) . '</a></td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('status', (string) ($order_row['status'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($this->formatWorkflowValue('classification', (string) ($order_row['classification'] ?? ''))) . '</td>';
+				echo '<td>' . esc_html($is_kpi_included > 0 ? __('Ano', 'ar-design-reporting') : __('Ne', 'ar-design-reporting')) . '</td>';
 				echo '<td>' . esc_html($this->formatUserLabel($owner_id)) . '</td>';
 				echo '<td>' . esc_html($this->formatUserLabel($last_actor_id)) . ' / ' . esc_html($this->formatGmtDate((string) ($order_row['last_status_change_at_gmt'] ?? ''))) . '</td>';
 				echo '<td>' . esc_html($ready_seconds > 0 ? $this->formatDuration($ready_seconds) : __('Nevyplněno', 'ar-design-reporting')) . '</td>';
@@ -350,6 +360,7 @@ final class DashboardPage
 		echo '<input type="hidden" name="page" value="ar-design-reporting" />';
 		echo '<input type="hidden" name="status" value="' . esc_attr($export_status) . '" />';
 		echo '<input type="hidden" name="classification" value="' . esc_attr($export_classification) . '" />';
+		echo '<input type="hidden" name="kpi_included" value="' . esc_attr($export_kpi_included) . '" />';
 		echo '<input type="hidden" name="date_from" value="' . esc_attr($export_date_from) . '" />';
 		echo '<input type="hidden" name="date_to" value="' . esc_attr($export_date_to) . '" />';
 		echo '<input type="hidden" name="compare_date_from" value="' . esc_attr($compare_date_from) . '" />';
@@ -415,6 +426,7 @@ final class DashboardPage
 		echo '<input type="hidden" name="action" value="ard_export_audit_xlsx" />';
 		echo '<input type="hidden" name="status" value="' . esc_attr($export_status) . '" />';
 		echo '<input type="hidden" name="classification" value="' . esc_attr($export_classification) . '" />';
+		echo '<input type="hidden" name="kpi_included" value="' . esc_attr($export_kpi_included) . '" />';
 		echo '<input type="hidden" name="date_from" value="' . esc_attr($audit_date_from) . '" />';
 		echo '<input type="hidden" name="date_to" value="' . esc_attr($audit_date_to) . '" />';
 		echo '<input type="hidden" name="audit_order_id" value="' . esc_attr($audit_order_id > 0 ? (string) $audit_order_id : '') . '" />';
@@ -438,11 +450,10 @@ final class DashboardPage
 		echo '</tbody>';
 		echo '</table>';
 
-		echo '<h2 style="margin-top:24px;">' . esc_html__('Export a emailing', 'ar-design-reporting') . '</h2>';
+		echo '<h2 style="margin-top:24px;">' . esc_html__('Export', 'ar-design-reporting') . '</h2>';
 		echo '<p><strong>' . esc_html__('Export', 'ar-design-reporting') . ':</strong> ' . esc_html(sprintf('%s / %s', (string) $export_info['format'], (string) $export_info['scope'])) . '</p>';
-		echo '<p><strong>' . esc_html__('Email digest', 'ar-design-reporting') . ':</strong> ' . esc_html(sprintf('%s / %s', (string) $email_info['type'], (string) $email_info['frequency'])) . '</p>';
+		echo '<p>' . esc_html__('Email digest je aktuálne vypnutý a skrytý.', 'ar-design-reporting') . '</p>';
 
-		echo '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">';
 		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;min-width:320px;">';
 		wp_nonce_field('ard_export_data');
 		echo '<h3 style="margin-top:0;">' . esc_html__('Export dát', 'ar-design-reporting') . '</h3>';
@@ -467,6 +478,12 @@ final class DashboardPage
 		echo '<option value="preorder"' . selected('preorder', $export_classification, false) . '>preorder</option>';
 		echo '<option value="custom"' . selected('custom', $export_classification, false) . '>custom</option>';
 		echo '</select></p>';
+		echo '<p><label for="ard-export-kpi-included">' . esc_html__('V KPI', 'ar-design-reporting') . '</label></p>';
+		echo '<p><select id="ard-export-kpi-included" name="kpi_included" class="regular-text">';
+		echo '<option value="">' . esc_html__('Všechny', 'ar-design-reporting') . '</option>';
+		echo '<option value="1"' . selected('1', $export_kpi_included, false) . '>' . esc_html__('Ano', 'ar-design-reporting') . '</option>';
+		echo '<option value="0"' . selected('0', $export_kpi_included, false) . '>' . esc_html__('Ne', 'ar-design-reporting') . '</option>';
+		echo '</select></p>';
 		echo '<p><label for="ard-export-date-from">' . esc_html__('Datum od', 'ar-design-reporting') . '</label></p>';
 		echo '<p><input id="ard-export-date-from" type="date" name="date_from" value="' . esc_attr($export_date_from) . '" class="regular-text" /></p>';
 		echo '<p><label for="ard-export-date-to">' . esc_html__('Datum do', 'ar-design-reporting') . '</label></p>';
@@ -476,57 +493,6 @@ final class DashboardPage
 		echo '<button type="submit" name="action" value="ard_export_xlsx" class="button button-secondary">' . esc_html__('Stáhnout XLSX', 'ar-design-reporting') . '</button>';
 		echo '</p>';
 		echo '</form>';
-
-		echo '<div style="display:flex;flex-direction:column;gap:16px;min-width:360px;max-width:520px;">';
-		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;">';
-		wp_nonce_field('ard_save_email_report');
-		echo '<input type="hidden" name="action" value="ard_save_email_report" />';
-		echo '<h3 style="margin-top:0;">' . esc_html__('Nastavení email digestu', 'ar-design-reporting') . '</h3>';
-		echo '<p><label for="ard-recipient-email">' . esc_html__('Příjemce', 'ar-design-reporting') . '</label></p>';
-		echo '<p><input id="ard-recipient-email" type="email" name="recipient_email" value="" required class="regular-text" /></p>';
-		echo '<p><label for="ard-schedule-key">' . esc_html__('Frekvence', 'ar-design-reporting') . '</label></p>';
-		echo '<p><select id="ard-schedule-key" name="schedule_key" class="regular-text">';
-		echo '<option value="daily">daily</option>';
-		echo '<option value="weekly">weekly</option>';
-		echo '</select></p>';
-		echo '<p><label><input type="checkbox" name="is_active" value="1" checked /> ' . esc_html__('Aktivní', 'ar-design-reporting') . '</label></p>';
-		submit_button(__('Uložit příjemce', 'ar-design-reporting'), 'secondary', 'submit', false);
-		echo '</form>';
-
-		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="background:#fff;border:1px solid #dcdcde;padding:16px;">';
-		wp_nonce_field('ard_send_digest_now');
-		echo '<input type="hidden" name="action" value="ard_send_digest_now" />';
-		echo '<h3 style="margin-top:0;">' . esc_html__('Spustit digest ručně', 'ar-design-reporting') . '</h3>';
-		echo '<p><label for="ard-send-schedule-key">' . esc_html__('Frekvence', 'ar-design-reporting') . '</label></p>';
-		echo '<p><select id="ard-send-schedule-key" name="schedule_key" class="regular-text">';
-		echo '<option value="daily">daily</option>';
-		echo '<option value="weekly">weekly</option>';
-		echo '</select></p>';
-		submit_button(__('Odeslat teď', 'ar-design-reporting'), 'secondary', 'submit', false);
-		echo '</form>';
-		echo '</div>';
-		echo '</div>';
-
-		echo '<h3 style="margin-top:16px;">' . esc_html__('Aktivní konfigurace digestu', 'ar-design-reporting') . '</h3>';
-		echo '<table class="widefat striped" style="max-width:960px;">';
-		echo '<thead><tr><th>' . esc_html__('Email', 'ar-design-reporting') . '</th><th>' . esc_html__('Frekvence', 'ar-design-reporting') . '</th><th>' . esc_html__('Aktivní', 'ar-design-reporting') . '</th><th>' . esc_html__('Naposledy odesláno (GMT)', 'ar-design-reporting') . '</th></tr></thead>';
-		echo '<tbody>';
-
-		if (empty($email_configs)) {
-			echo '<tr><td colspan="4">' . esc_html__('Zatím nejsou uložené žádné konfigurace.', 'ar-design-reporting') . '</td></tr>';
-		} else {
-			foreach ($email_configs as $config) {
-				echo '<tr>';
-				echo '<td>' . esc_html((string) ($config['recipient_email'] ?? '')) . '</td>';
-				echo '<td>' . esc_html((string) ($config['schedule_key'] ?? '')) . '</td>';
-				echo '<td>' . esc_html(! empty($config['is_active']) ? __('Ano', 'ar-design-reporting') : __('Ne', 'ar-design-reporting')) . '</td>';
-				echo '<td>' . esc_html((string) ($config['last_sent_at_gmt'] ?? '')) . '</td>';
-				echo '</tr>';
-			}
-		}
-
-		echo '</tbody>';
-		echo '</table>';
 
 		echo '<h2 style="margin-top:24px;">' . esc_html__('Workflow akce', 'ar-design-reporting') . '</h2>';
 		echo '<p>' . esc_html__('Workflow akce sú presunuté priamo do administrácie konkrétnej objednávky (detail objednávky vo WooCommerce).', 'ar-design-reporting') . '</p>';
@@ -941,7 +907,7 @@ final class DashboardPage
 	private function renderDashboardStyles(): void
 	{
 		echo '<style>
-		.ard-reporting-dashboard { max-width: 1400px; color: #1f2933; }
+		.ard-reporting-dashboard { width: 100%; max-width: none; color: #1f2933; }
 		.ard-reporting-dashboard h1 { margin-bottom: 6px; font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
 		.ard-reporting-dashboard h2 { margin-top: 0 !important; margin-bottom: 14px; font-size: 20px; border-bottom: none; padding-bottom: 0; }
 		.ard-reporting-dashboard h3 { margin: 14px 0 8px 0; font-size: 15px; }
@@ -1028,6 +994,7 @@ final class DashboardPage
 		.ard-pro-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr); gap: 16px; margin-top: 18px; align-items: start; }
 		.ard-panel { background: #fff; border: 1px solid #d9e0e7; border-radius: 14px; padding: 16px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
 		.ard-panel + .ard-panel { margin-top: 0; }
+		.ard-panel-full { margin-top: 18px; }
 		.ard-panel-title { margin: 0 0 12px 0; font-size: 17px; font-weight: 700; color: #0f172a; }
 		.ard-subsection { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ebf3; }
 		.ard-subsection:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
@@ -1310,10 +1277,32 @@ final class DashboardPage
 			});
 
 			var groups = [
-				{ key: "main", title: "Prehľad výkonu", sectionTitles: ["KPI snapshot", "Prehľad objednávok", "Výkon zamestnancov"] },
+				{ key: "main", title: "Prehľad výkonu", sectionTitles: ["KPI snapshot", "Výkon zamestnancov"] },
 				{ key: "workflow", title: "Workflow a audit", sectionTitles: ["Workflow detail objednávky", "Auditný prehľad", "Posledné archivácie zmazaných objednávok"] },
-				{ key: "ops", title: "Nastavenia a export", sectionTitles: ["Export a emailing", "Reporting tabulky", "Připravené moduly", "Workflow akce", "Ďalší krok"] }
+				{ key: "ops", title: "Nastavenia a export", sectionTitles: ["Export", "Reporting tabulky", "Připravené moduly", "Workflow akce", "Ďalší krok"] }
 			];
+
+			var ordersNodes = blocks["Prehľad objednávok"] || null;
+			var ordersPanel = null;
+			if (ordersNodes && ordersNodes.length) {
+				ordersPanel = document.createElement("section");
+				ordersPanel.className = "ard-panel ard-panel-full";
+
+				var ordersPanelTitle = document.createElement("h2");
+				ordersPanelTitle.className = "ard-panel-title";
+				ordersPanelTitle.textContent = "Prehľad objednávok";
+				ordersPanel.appendChild(ordersPanelTitle);
+
+				var ordersSubsection = document.createElement("div");
+				ordersSubsection.className = "ard-subsection";
+				ordersNodes.forEach(function (node, index) {
+					if (index === 0) {
+						return;
+					}
+					ordersSubsection.appendChild(node);
+				});
+				ordersPanel.appendChild(ordersSubsection);
+			}
 
 			var grid = document.createElement("div");
 			grid.className = "ard-pro-grid";
@@ -1365,6 +1354,9 @@ final class DashboardPage
 				}
 			});
 
+			if (ordersPanel) {
+				root.appendChild(ordersPanel);
+			}
 			root.appendChild(grid);
 			initOrdersOverviewPagination();
 			initAuditEventsPagination();

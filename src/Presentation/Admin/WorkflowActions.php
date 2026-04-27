@@ -147,25 +147,13 @@ final class WorkflowActions
 	public function handleSaveEmailReport(): void
 	{
 		$this->ensurePermissions();
-		check_admin_referer('ard_save_email_report');
-
-		$email    = isset($_POST['recipient_email']) ? sanitize_email(wp_unslash($_POST['recipient_email'])) : '';
-		$schedule = isset($_POST['schedule_key']) ? sanitize_key(wp_unslash($_POST['schedule_key'])) : 'daily';
-		$active   = isset($_POST['is_active']) ? (bool) absint(wp_unslash($_POST['is_active'])) : false;
-		$saved    = $this->email_reporter->saveConfiguration($email, $schedule, $active);
-
-		$this->redirectBack($saved ? 'email_saved' : 'email_save_failed');
+		$this->redirectBack('digest_disabled');
 	}
 
 	public function handleSendDigestNow(): void
 	{
 		$this->ensurePermissions();
-		check_admin_referer('ard_send_digest_now');
-
-		$schedule = isset($_POST['schedule_key']) ? sanitize_key(wp_unslash($_POST['schedule_key'])) : 'daily';
-		$sent     = $this->email_reporter->sendScheduledDigest($schedule);
-
-		$this->redirectBack('digest_sent', 0, $sent);
+		$this->redirectBack('digest_disabled');
 	}
 
 	private function ensurePermissions(): void

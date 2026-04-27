@@ -90,7 +90,8 @@ final class Bootstrap
 
 	public function registerSchedulers(): void
 	{
-		$this->container->get( DigestScheduler::class )->register();
+		// Email digest is intentionally disabled; keep cron queue clean.
+		$this->container->get( DigestScheduler::class )->unscheduleAll();
 	}
 
 	public function registerUpdaters(): void
@@ -227,6 +228,10 @@ final class Bootstrap
 					__( 'Manuálny digest bol odoslaný na %d e-mailov.', 'ar-design-reporting' ),
 					$sent_count
 				);
+			}
+
+			if ( 'digest_disabled' === $action ) {
+				$message = __( 'Email digest je vypnutý.', 'ar-design-reporting' );
 			}
 
 			if ( '' !== $message ) {
